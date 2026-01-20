@@ -108,7 +108,20 @@ ACM focuses on **asset accountability**, **maintenance compliance**, and **audit
 
 ## 🧱 Project Structure
 
-
+Asset Compliance Manager
+├───data/
+│   ├───AMC
+│   └───Calibration
+├───instance
+├───static/
+│   ├───css/..
+│   └───js/..
+├───templates/...
+├───uploads
+├───app.db
+├───app.py
+├───models.py
+├───requirements.txt
 
 ---
 
