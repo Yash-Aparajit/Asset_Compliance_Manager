@@ -13,16 +13,6 @@ The system enforces **strict business rules**, **audit-safe data handling**, and
 
 ---
 
-## 🎯 Core Objectives
-
-- Maintain a **single source of truth** for assets
-- Enforce **compliance-first workflows**
-- Preserve **permanent audit history**
-- Prevent unsafe or invalid operations by design
-- Support **repeatable imports and long-term usage**
-
----
-
 ## 🚀 Features
 
 ### ✅ Asset Management
