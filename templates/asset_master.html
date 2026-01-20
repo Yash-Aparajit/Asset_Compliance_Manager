@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Asset Master | ACM{% endblock %}
+
+{% block content %}
+
+<!-- PAGE HEADER -->
+<div class="card header-card">
+    <div class="header-left">
+        <h1>Asset Master</h1>
+        <p class="muted-text">Master register of all assets</p>
+    </div>
+
+    <div class="header-actions">
+        <a href="{{ url_for('add_asset') }}" class="btn btn-primary">
+            + Add Asset
+        </a>
+        <a href="{{ url_for('import_assets') }}" class="btn btn-secondary">
+            Import Assets
+        </a>
+    </div>
+</div>
+
+<!-- FILTERS -->
+<div class="card filter-card">
+    <form method="GET" class="filter-form">
+
+        <div class="filter-row">
+            <div class="form-group">
+                <label>Search</label>
+                <input
+                    type="text"
+                    name="search"
+                    placeholder="Asset ID / Name / Serial No"
+                    value="{{ request.args.get('search', '') }}"
+                >
+            </div>
+
+            <div class="form-group">
+                <label>Plant</label>
+                <input
+                    type="text"
+                    name="plant"
+                    value="{{ request.args.get('plant', '') }}"
+                >
+            </div>
+
+            <div class="form-group">
+                <label>Department</label>
+                <input
+                    type="text"
+                    name="department"
+                    value="{{ request.args.get('department', '') }}"
+                >
+            </div>
+
+            <div class="form-group">
+                <label>Status</label>
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="Active"
+                        {% if request.args.get('status') == 'Active' %}selected{% endif %}>
+                        Active
+                    </option>
+                    <option value="Scrapped"
+                        {% if request.args.get('status') == 'Scrapped' %}selected{% endif %}>
+                        Scrapped
+                    </option>
+                </select>
+            </div>
+            <div class="filter-actions-inline">
+                <button type="submit" class="btn btn-primary">Apply</button>
+                <a href="{{ url_for('asset_master') }}" class="btn btn-secondary">Reset</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- ASSET LIST -->
+<div class="card table-card">
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Asset ID</th>
+                <th>Asset Name</th>
+                <th>Serial No</th>
+                <th>Plant</th>
+                <th>Department</th>
+                <th>Location</th>
+                <th>Purchase Date</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% if assets %}
+                {% for asset in assets %}
+                <tr class="{% if asset.status == 'Scrapped' %}row-scrapped{% endif %}">
+                    <td class="mono">{{ asset.asset_code }}</td>
+
+                    <td class="asset-name">
+                        {{ asset.asset_name }}
+                    </td>
+
+                    <td>{{ asset.serial_no or "-" }}</td>
+                    <td>{{ asset.plant or "-" }}</td>
+                    <td>{{ asset.department or "-" }}</td>
+                    <td>{{ asset.location or "-" }}</td>
+                    <td>
+                        {{ format_date_indian(asset.purchase_date) }}
+                    </td>
+
+                    <td>
+                        <span class="status-pill {{ asset.status|lower }}">
+                            {{ asset.status }}
+                        </span>
+                    </td>
+                    <td class="actions">
+                        <a href="{{ url_for('edit_asset', asset_id=asset.id) }}"
+                        class="link-action">
+                            Edit
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="9" class="empty-state">
+                        No assets found
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
