@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Import Assets | ACM{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="card header-card">
+    <div class="header-left">
+        <h1>Import Assets</h1>
+        <p class="muted-text">
+            Download the template, fill asset details, and upload for validation
+        </p>
+    </div>
+</div>
+
+<!-- INSTRUCTIONS -->
+<div class="card">
+    <p class="muted-text">
+        Step 1: Download the Excel template<br>
+        Step 2: Fill asset details (do not change column headers)<br>
+        Step 3: Upload the file for validation
+    </p>
+
+    <ul class="muted-text">
+        <li>Purchase Date must be in <strong>DD/MM/YYYY</strong> format</li>
+        <li>Asset Code must be <strong>unique</strong></li>
+        <li>Status is system-controlled and should not be added</li>
+    </ul>
+
+    <a href="{{ url_for('download_asset_template') }}"
+       class="btn btn-secondary">
+        Download Excel Template
+    </a>
+</div>
+
+<!-- UPLOAD -->
+<div class="card form-card">
+    <div class="import-box">
+        <form method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" accept=".xlsx" required>
+
+            <button type="submit" class="btn btn-primary import-confirm">
+                Validate & Preview Import
+            </button>
+
+            <a href="{{ url_for('asset_master') }}"
+               class="btn btn-secondary">
+                Cancel
+            </a>
+        </form>
+    </div>
+</div>
+
+{% if valid_rows or invalid_rows %}
+<div id="importPreviewModal" class="modal-overlay">
+    <div class="modal">
+
+        <div class="modal-header">
+            <h2>Import Preview</h2>
+            <span class="modal-close" data-close-modal>&times;</span>
+        </div>
+
+        <div class="modal-body">
+
+            {% if valid_rows %}
+            <div class="card import-valid">
+                <h3>Valid Rows ({{ valid_rows|length }})</h3>
+
+                <table class="asset-table">
+                    <thead>
+                        <tr>
+                            <th>Row</th>
+                            <th>Asset Code</th>
+                            <th>Asset Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in valid_rows %}
+                        <tr>
+                            <td>{{ r.row_no }}</td>
+                            <td>{{ r.asset_code }}</td>
+                            <td>{{ r.asset_name }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            {% if invalid_rows %}
+            <div class="card import-invalid">
+                <h3>Invalid Rows ({{ invalid_rows|length }})</h3>
+
+                <table class="asset-table">
+                    <thead>
+                        <tr>
+                            <th>Row</th>
+                            <th>Asset Code</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in invalid_rows %}
+                        <tr class="row-error">
+                            <td>{{ r.row_no }}</td>
+                            <td>{{ r.asset_code }}</td>
+                            <td>{{ r.errors | join(', ') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-secondary" data-close-modal>
+                Cancel
+            </button>
+
+            {% if valid_rows %}
+            <form method="POST" action="{{ url_for('confirm_import') }}">
+                <button type="submit" class="btn btn-primary">
+                    Import {{ valid_rows|length }} Assets
+                </button>
+            </form>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
