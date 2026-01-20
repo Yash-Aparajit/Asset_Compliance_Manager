@@ -13,18 +13,6 @@ ACM focuses on **asset accountability**, **maintenance compliance**, and **audit
 
 ---
 
-## 🎯 Core Design Philosophy
-
-> **Nothing is deleted. Everything is traceable. Rules > Convenience.**
-
-- AMC is a **lifecycle**
-- Calibration is a **recording system**
-- Events and documents are **immutable**
-- History is **separate from operations**
-- Designed for **non-technical factory users**
-
----
-
 ## 🚀 Features
 
 ### ✅ Asset Management
@@ -108,20 +96,21 @@ ACM focuses on **asset accountability**, **maintenance compliance**, and **audit
 
 ## 🧱 Project Structure
 
+```text
 Asset Compliance Manager
-├───data/
-│   ├───AMC
-│   └───Calibration
-├───instance
-├───static/
-│   ├───css/..
-│   └───js/..
-├───templates/...
-├───uploads
-├───app.db
-├───app.py
-├───models.py
-├───requirements.txt
+├── data/
+│   ├── AMC/
+│   └── Calibration/
+├── instance/
+├── static/
+│   ├── css/
+│   └── js/
+├── templates/
+├── uploads
+├── app.db
+├── app.py
+├── models.py
+└── requirements.txt
 
 ---
 
