@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Asset Compliance Manager{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- TOP NAVBAR -->
+<header class="topbar">
+    <span class="app-title">ACM</span>
+
+    <nav class="nav-links">
+        <a href="{{ url_for('asset_master') }}"
+           class="{% if request.path.startswith('/assets') %}active{% endif %}">
+            Asset Master
+        </a>
+
+        <a href="{{ url_for('amc_create') }}"
+        class="{% if request.path.startswith('/amc') %}active{% endif %}">
+            AMC
+        </a>
+
+        <span class="nav-disabled">Calibration</span>
+        <span class="nav-disabled">History</span>
+        <span class="nav-disabled">Scrap</span>
+        <span class="nav-disabled">Reminders</span>
+    </nav>
+
+    <div class="topbar-right">
+        <span class="user-info">
+            {{ session.get('username') }} ({{ session.get('role') }})
+        </span>
+        <a href="{{ url_for('logout') }}" class="logout-link">Logout</a>
+    </div>
+</header>
+
+
+<!-- MAIN CONTENT -->
+<main class="main-container">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-container">
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+
+</main>
+
+<script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+</body>
+</html>
