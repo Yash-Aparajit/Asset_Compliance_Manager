@@ -7,45 +7,56 @@
 ![Status](https://img.shields.io/badge/Status-Active%20Development-yellow.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
-**Asset Compliance Manager (ACM)** is a **factory-grade asset lifecycle & compliance system** built for **real industrial operations**, not CMMS theory.
+**Asset Compliance Manager (ACM)** is a **factory-grade asset compliance and maintenance tracking system** built for **real industrial operations**, not CMMS theory.
 
-ACM focuses on **asset accountability**, **maintenance compliance**, and **audit-safe history** with strict business rules and non-destructive data handling.
+The system enforces **strict business rules**, **audit-safe data handling**, and **non-destructive history**, making it suitable for **manufacturing plants, QA environments, and compliance-driven organizations**.
+
+---
+
+## 🎯 Core Objectives
+
+- Maintain a **single source of truth** for assets
+- Enforce **compliance-first workflows**
+- Preserve **permanent audit history**
+- Prevent unsafe or invalid operations by design
+- Support **repeatable imports and long-term usage**
 
 ---
 
 ## 🚀 Features
 
 ### ✅ Asset Management
-- Asset master with unique `asset_code`
-- Asset import via Excel (repeatable & safe)
-- Asset status: Active / Inactive / Scrapped
+- Centralized asset master
+- Unique `asset_code` enforced
+- Asset states: Active / Inactive / Scrapped
 - Scrapped assets are locked from operations
+- Excel-based bulk import (safe & repeatable)
 
 ---
 
 ### ✅ AMC (Annual Maintenance Contract)
-- One **active AMC per asset** (hard rule)
-- Start–end date lifecycle
+- Exactly **one active AMC per asset**
+- Start–end date lifecycle tracking
 - Auto status: Active / Overdue / Expired
-- AMC event tracking (cost & remarks)
-- AMC document upload (PDF only)
-- System-controlled file naming
+- AMC events (cost & remarks)
+- AMC document uploads (PDF only)
+- System-controlled, collision-safe filenames
 - Permanent AMC history
 
 ---
 
 ### ✅ Calibration
-- Calibration is **record-based**, not lifecycle-based
-- Record calibration for assets
-- Track last calibration & next due date
+- Record-based system (not lifecycle-based)
+- Each calibration is a permanent record
+- Tracks last calibration & next due date
 - Calibration events
 - Calibration documents
-- Permanent history storage
+- Designed for audit traceability
 
 ---
 
 ### ✅ Events System
-- Events belong to **either AMC or Calibration**
+- Events belong to either AMC or Calibration
 - Events are immutable
 - Cost & remarks supported
 - Full audit trail
@@ -55,7 +66,7 @@ ACM focuses on **asset accountability**, **maintenance compliance**, and **audit
 ### ✅ Document Management
 - PDF-only uploads
 - System-generated filenames
-- Collision-safe naming
+- Collision-safe versioning
 - Linked to AMC or Calibration
 - Browser-based document viewer
 
@@ -67,7 +78,7 @@ ACM focuses on **asset accountability**, **maintenance compliance**, and **audit
 - Full transaction rollback on error
 - UPSERT logic using `asset_code`
 - Safe to run multiple times
-- Available to multiple roles
+- Accessible to multiple roles
 
 ---
 
@@ -76,21 +87,21 @@ ACM focuses on **asset accountability**, **maintenance compliance**, and **audit
 ### AMC Rules
 - ❌ Multiple active AMCs per asset — blocked
 - ❌ AMC for scrapped asset — blocked
-- ❌ Manual file naming — blocked
+- ❌ Manual document naming — blocked
 
 ### Calibration Rules
 - Calibration is **not** a lifecycle
-- Each calibration is a permanent record
-- History is preserved forever
+- Every calibration is a permanent record
+- History is never overwritten or deleted
 
-### Events
-- Must belong to **exactly one context**
-- Cannot be edited or deleted
+### Event Rules
+- Event must belong to **exactly one context**
+- Events cannot be edited or deleted
 
-### Documents
+### Document Rules
 - PDF only
-- System-generated filenames
-- No overwrite without versioning
+- System-controlled filenames
+- No silent overwrites
 
 ---
 
@@ -106,7 +117,7 @@ Asset Compliance Manager
 │   ├── css/
 │   └── js/
 ├── templates/
-├── uploads
+├── uploads/
 ├── app.db
 ├── app.py
 ├── models.py
@@ -114,25 +125,24 @@ Asset Compliance Manager
 
 ---
 
-## ⚙️ Tech Stack
+⚙️ Tech Stack
 
-- **Backend:** Flask
-- **ORM:** SQLAlchemy
-- **Database:** SQLite (PostgreSQL planned)
-- **Frontend:** Jinja2 + Bootstrap
-- **Excel Handling:** Pandas + OpenPyXL
+-Backend: Flask
+-ORM: SQLAlchemy
+-Database: SQLite (PostgreSQL planned)
+-Frontend: Jinja2 + Bootstrap
+-Excel Handling: Pandas + OpenPyXL
 
 ---
 
-## 🛠️ Setup Instructions
+🛠️ Setup Instructions
 
-```bash
-git clone https://github.com/your-username/asset-compliance-manager.git
-cd asset-compliance-manager
+- git clone https://github.com/your-username/asset-compliance-manager.git
+- cd asset-compliance-manager
 
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+- python -m venv venv
+- Windows: venv\Scripts\activate
 
-pip install -r requirements.txt
+- pip install -r requirements.txt
 
-python app.py
+- python app.py
