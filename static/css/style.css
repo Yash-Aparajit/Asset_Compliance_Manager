@@ -1,0 +1,478 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* =====================
+   DESIGN TOKENS
+===================== */
+:root {
+    --bg: #eef2f7;
+    --card: #fbfcfe;
+    --card-alt: #f4f7fb;
+    --text: #1f2937;
+    --muted: #5f6b7a;
+    --border: #dce3ec;
+
+    --primary: #2563eb;
+    --primary-soft: #e8efff;
+
+    --success: #16a34a;
+    --success-soft: #e7f6ec;
+
+    --danger: #dc2626;
+
+    --radius: 12px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 6px 20px rgba(0,0,0,0.08);
+}
+
+/* =====================
+   GLOBAL
+===================== */
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15.5px;
+    line-height: 1.45;
+}
+
+a { text-decoration: none; color: inherit; }
+
+/* =====================
+   TOPBAR
+===================== */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+
+    height: 60px;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;           
+
+    background: linear-gradient(180deg, #ffffff, #f6f9ff);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    z-index: 100;
+
+    padding: 0 26px;
+    overflow-x: auto;            
+}
+
+.app-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-right: 40px;
+    white-space: nowrap;
+}
+
+.nav-links {
+    display: flex;
+    gap: 22px;
+    align-items: center;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+    flex-shrink: 0;            
+}
+
+.nav-links a {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.nav-links a.active,
+.nav-links a:hover {
+    color: var(--primary);
+}
+
+.nav-disabled {
+    color: #b7c0cc;
+    font-weight: 600;
+}
+
+.topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    white-space: nowrap;
+    flex-shrink: 1;              
+}
+
+.user-info {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.logout-link {
+    margin-left: 14px;
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* =====================
+   MAIN LAYOUT
+===================== */
+.main-container {
+    padding: 22px;
+    padding-top: 90px;
+    max-width: 1400px;
+    margin: auto;
+}
+
+/* =====================
+   CARDS
+===================== */
+.card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border);
+}
+
+.header-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.header-actions {
+    display: flex;
+    gap: 15px;  
+}
+
+.header-left h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.muted-text {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13.5px;
+}
+
+/* =====================
+   BUTTONS
+===================== */
+.btn {
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background: linear-gradient(180deg, #3b82f6, #2563eb);
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #edf1f7;
+    color: var(--text);
+}
+
+.btn-primary:hover {
+    box-shadow: 0 8px 22px rgba(37,99,235,0.35);
+}
+
+.btn-secondary:hover {
+    background: #e3e9f2;
+}
+
+.link-action {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--primary);
+}
+
+/* =====================
+   FORMS
+===================== */
+.form-grid,
+.filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    align-items: end;
+
+}
+
+.filter-actions-inline {
+    display: flex;
+    gap: 10px;
+}
+
+.form-group label {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 6px;
+}
+
+.form-card {
+    max-width: 1100px;
+    margin: auto;
+    padding: 24px;
+    min-height: 220px;
+}
+
+.asset-form {
+    padding-top: 6px;
+}
+
+.form-grid {
+    row-gap: 18px;
+}
+
+.form-group {
+    background: #ffffff;
+    padding: 4px 2px;
+}
+
+input, select {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    font-size: 15px;
+    font-family: inherit;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+}
+
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 26px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+/* =====================
+   TABLE
+===================== */
+.asset-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.asset-table th {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px;
+    border-bottom: 2px solid var(--border);
+    text-align: center;
+}
+
+.asset-table th:nth-child(2),
+.asset-table td.asset-name {
+    text-align: left;
+}
+
+.asset-table td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+    text-align: center;
+}
+
+.asset-table tr:nth-child(even) {
+    background: var(--card-alt);
+}
+
+.asset-name {
+    font-size: 16.5px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 600;
+}
+
+/* =====================
+   STATUS
+===================== */
+.status-pill {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.status-pill.active {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.status-pill.scrapped {
+    background: #edf1f7;
+    color: var(--muted);
+}
+
+/* =====================
+   LOGIN
+===================== */
+.login-page {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #eef2f7, #e6ebf3);
+}
+
+.login-card {
+    width: 380px;
+    padding: 34px;
+    background: var(--card);
+    border-radius: 18px;
+    box-shadow: var(--shadow-md);
+}
+
+.login-title {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 24px;
+}
+
+/* =====================
+   Import Buttons
+===================== */
+
+.import-box {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    text-align: center;
+    background: #f8fbff;
+}
+
+.import-box input[type="file"] {
+    display: block;
+    margin: 14px auto 20px auto;
+    font-size: 14px;
+}
+
+.import-box .btn-primary {
+    padding: 12px 28px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* =====================
+   IMPORT PREVIEW VISIBILITY
+===================== */
+
+/* Strong visual anchor when preview appears */
+.import-preview-card {
+    border: 2px solid var(--primary);
+    background: linear-gradient(180deg, #ffffff, #f3f7ff);
+}
+
+/* Section headings inside import preview */
+.import-preview-card h2,
+.import-preview-card h3 {
+    margin-top: 0;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* Valid rows emphasis */
+.import-valid {
+    border-left: 6px solid var(--success);
+}
+
+/* Invalid rows emphasis */
+.import-invalid {
+    border-left: 6px solid var(--danger);
+}
+
+/* Error rows */
+.row-error {
+    background: #fff5f5 !important;
+    color: #7f1d1d;
+}
+
+/* Error text readability */
+.import-error-text {
+    font-size: 13.5px;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+/* Import confirm button – primary action */
+.import-confirm {
+    margin-top: 16px;
+    padding: 14px 32px;
+    font-size: 15.5px;
+    font-weight: 700;
+}
+
+/* File upload clarity */
+.import-box input[type="file"] {
+    max-width: 420px;
+    margin: 16px auto 22px auto;
+    cursor: pointer;
+}
+
+/* Make upload CTA impossible to miss */
+.import-box .btn-primary {
+    margin-right: 12px;
+}
+
+/* Space between upload and preview */
+.import-preview-spacer {
+    height: 12px;
+}
+
+/* =====================
+   MODAL (IMPORT PREVIEW)
+===================== */
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal {
+    background: #ffffff;
+    border-radius: 16px;
+    width: 92%;
+    max-width: 1100px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.35);
+    animation: modalFadeIn 0.18s ease-out;
+}
+
