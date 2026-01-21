@@ -5,7 +5,7 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
-from models import db, User, Asset
+from models import db, User, Asset, AMC, AMCEvent, AMCDocument
 from datetime import datetime, date
 
 import pandas as pd
@@ -28,6 +28,15 @@ app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
+
+
+# -------------------------------------------------
+# FILE STORAGE PATHS
+# -------------------------------------------------
+DATA_DIR = os.path.join(BASE_DIR, "data")
+AMC_DOC_DIR = os.path.join(DATA_DIR, "AMC")
+
+os.makedirs(AMC_DOC_DIR, exist_ok=True)
 
 
 # -------------------------------------------------
@@ -62,6 +71,19 @@ def parse_indian_date(val):
 
     return None
 
+def get_amc_status(amc):
+    today = date.today()
+
+    if amc.is_completed:
+        return ("completed", "Completed")
+
+    if amc.is_cancelled:
+        return ("cancelled", "Cancelled")
+
+    if today > amc.end_date:
+        return ("overdue", "Overdue")
+
+    return ("active", "Active")
 
 # -------------------------------------------------
 # ASSET IMPORT SCHEMA
@@ -109,13 +131,13 @@ def seed_users():
     users = [
         {
             "username": "developer",
-            "password": "Your Password here",
+            "password": "dev@123@123",
             "role": "developer"
         },
         {
-            "username": "User",
-            "password": "Your Password 2 here",
-            "role": "User"
+            "username": "purchase",
+            "password": "purchase@jeena",
+            "role": "purchase"
         }
     ]
 
@@ -514,6 +536,275 @@ def download_asset_template():
         download_name="ACM_Asset_Import_Template.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
+
+# -------------------------------------------------
+# AMC CREATE + ACTIVE LIST
+# -------------------------------------------------
+@app.route("/amc", methods=["GET", "POST"])
+@login_required
+def amc_create():
+    assets = Asset.query.order_by(Asset.id.asc()).all()
+
+    active_amcs = (
+        AMC.query
+        .filter_by(is_completed=False, is_cancelled=False)
+        .all()
+    )
+
+    if request.method == "POST":
+        asset_id = request.form.get("asset_id")
+        start_date = request.form.get("start_date")
+        end_date = request.form.get("end_date")
+        yearly_cost = request.form.get("yearly_cost")
+
+        # ---------- VALIDATIONS ----------
+        asset = Asset.query.get(asset_id)
+        if not asset:
+            flash("Invalid asset selected", "danger")
+            return redirect(url_for("amc_create"))
+
+        if asset.status == "Scrapped":
+            flash("Cannot create AMC for scrapped asset", "danger")
+            return redirect(url_for("amc_create"))
+
+        existing_amc = AMC.query.filter_by(
+            asset_id=asset.id,
+            is_completed=False,
+            is_cancelled=False
+        ).first()
+
+        if existing_amc:
+            flash("Active AMC already exists for this asset", "danger")
+            return redirect(url_for("amc_create"))
+
+        try:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except Exception:
+            flash("Invalid date format", "danger")
+            return redirect(url_for("amc_create"))
+
+        if start_date >= end_date:
+            flash("Start date must be before end date", "danger")
+            return redirect(url_for("amc_create"))
+
+        # ---------- CREATE ----------
+        amc = AMC(
+            asset_id=asset.id,
+            start_date=start_date,
+            end_date=end_date,
+            yearly_cost=float(yearly_cost) if yearly_cost else None
+        )
+
+        db.session.add(amc)
+        db.session.commit()
+
+        flash("AMC created successfully", "success")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    amc_status_map = {}
+
+    for amc in active_amcs:
+        status_key, status_label = get_amc_status(amc)
+        amc_status_map[amc.id] = {
+            "key": status_key,
+            "label": status_label
+        }
+
+    return render_template(
+        "amc_create.html",
+        assets=assets,
+        active_amcs=active_amcs,
+        amc_status_map=amc_status_map
+    )
+
+
+# -------------------------------------------------
+# AMC VIEW
+# -------------------------------------------------
+@app.route("/amc/<int:amc_id>")
+@login_required
+def amc_view(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+    asset = amc.asset
+
+    today = date.today()
+    days_left = (amc.end_date - today).days
+
+    status_key, status_label = get_amc_status(amc)
+
+    asset_age = None
+    if asset.purchase_date:
+        asset_age = (today - asset.purchase_date).days
+
+    return render_template(
+        "amc_view.html",
+        amc=amc,
+        asset=asset,
+        status_key=status_key,
+        status_label=status_label,
+        asset_age=asset_age,
+        days_left=days_left,
+        today=today
+    )
+
+
+# -------------------------------------------------
+# AMC EVENT CREATE
+# -------------------------------------------------
+@app.route("/amc/<int:amc_id>/event", methods=["POST"])
+@login_required
+def amc_add_event(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+
+    if amc.is_completed or amc.is_cancelled:
+        flash("Cannot add event to closed AMC", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    event_date = request.form.get("event_date")
+    remarks = request.form.get("remarks")
+    cost = request.form.get("cost")
+
+    try:
+        event_date = datetime.strptime(event_date, "%Y-%m-%d").date()
+    except Exception:
+        flash("Invalid event date", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    event = AMCEvent(
+        amc_id=amc.id,
+        event_date=event_date,
+        remarks=remarks,
+        cost=float(cost) if cost else None
+    )
+
+    db.session.add(event)
+    db.session.commit()
+
+    flash("AMC event added successfully", "success")
+    return redirect(url_for("amc_view", amc_id=amc.id))
+
+
+# -------------------------------------------------
+# AMC DOCUMENT UPLOAD
+# -------------------------------------------------
+@app.route("/amc/<int:amc_id>/document", methods=["POST"])
+@login_required
+def amc_upload_document(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+
+    if amc.is_completed or amc.is_cancelled:
+        flash("Cannot upload document to closed AMC", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    file = request.files.get("file")
+    doc_type = request.form.get("document_type")
+
+    if doc_type == "Other":
+        doc_type = request.form.get("other_document_type", "").strip()
+        if not doc_type:
+            flash("Please specify document type", "danger")
+            return redirect(url_for("amc_view", amc_id=amc.id))
+
+
+    if not file or not file.filename.lower().endswith(".pdf"):
+        flash("Only PDF files are allowed", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    asset_code = amc.asset.asset_code
+    upload_date = datetime.today().strftime("%d-%m-%y")
+    month_year = datetime.today().strftime("%m-%Y")
+
+
+    base_name = f"{month_year}_AMC_{asset_code}_{doc_type}_{upload_date}"
+
+    seq = 1
+    stored_filename = f"{base_name}_{seq}.pdf"
+    file_path = os.path.join(AMC_DOC_DIR, stored_filename)
+
+    while os.path.exists(file_path):
+        seq += 1
+        stored_filename = f"{base_name}_{seq}.pdf"
+        file_path = os.path.join(AMC_DOC_DIR, stored_filename)
+
+    file.save(file_path)
+
+    doc = AMCDocument(
+        amc_id=amc.id,
+        document_type=doc_type,
+        stored_filename=stored_filename,
+        original_filename=file.filename
+    )
+
+    db.session.add(doc)
+    db.session.commit()
+
+    flash("Document uploaded successfully", "success")
+    return redirect(url_for("amc_view", amc_id=amc.id))
+
+
+# -------------------------------------------------
+# AMC DOCUMENT DOWNLOAD
+# -------------------------------------------------
+@app.route("/amc/document/<int:doc_id>/download")
+@login_required
+def amc_download_document(doc_id):
+    doc = AMCDocument.query.get_or_404(doc_id)
+
+    file_path = os.path.join(AMC_DOC_DIR, doc.stored_filename)
+
+    if not os.path.exists(file_path):
+        flash("File not found on server", "danger")
+        return redirect(url_for("amc_view", amc_id=doc.amc_id))
+
+    return send_file(
+        file_path,
+        as_attachment=False,
+        mimetype="application/pdf"
+    )
+
+
+# -------------------------------------------------
+# AMC COMPLETE
+# -------------------------------------------------
+@app.route("/amc/<int:amc_id>/complete", methods=["GET", "POST"])
+@login_required
+def amc_complete(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+
+    if amc.is_completed or amc.is_cancelled:
+        flash("AMC already closed", "warning")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    amc.is_completed = True
+    amc.completed_on = date.today()
+
+    db.session.commit()
+
+    flash("AMC marked as completed", "success")
+    return redirect(url_for("amc_view", amc_id=amc.id))
+
+
+# -------------------------------------------------
+# AMC CANCEL
+# -------------------------------------------------
+@app.route("/amc/<int:amc_id>/cancel", methods=["GET", "POST"])
+@login_required
+def amc_cancel(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+
+    if amc.is_completed or amc.is_cancelled:
+        flash("AMC already closed", "warning")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    amc.is_cancelled = True
+    amc.completed_on = date.today()
+
+    db.session.commit()
+
+    flash("AMC marked as cancelled", "success")
+    return redirect(url_for("amc_view", amc_id=amc.id))
 
 
 # -------------------------------------------------
