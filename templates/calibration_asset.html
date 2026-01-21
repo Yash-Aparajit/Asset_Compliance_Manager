@@ -1,0 +1,33 @@
+<div class="card">
+    <h3>Asset Details</h3>
+    <p><b>Code:</b> {{ asset.asset_code }}</p>
+    <p><b>Name:</b> {{ asset.asset_name }}</p>
+    <p><b>Serial:</b> {{ asset.serial_no or "-" }}</p>
+    <p><b>Plant:</b> {{ asset.plant or "-" }}</p>
+</div>
+
+<div class="card">
+    <h3>Latest Calibration</h3>
+
+    {% if latest_cal %}
+        <p>Done: {{ format_date_indian(latest_cal.calibration_done_date) }}</p>
+        <p>Next Due: {{ format_date_indian(latest_cal.next_due_date) }}</p>
+    {% else %}
+        <p>No calibration recorded</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Record Calibration</h3>
+
+    <form method="POST" action="{{ url_for('save_calibration') }}">
+        <input type="hidden" name="asset_id" value="{{ asset.id }}">
+
+        <input type="date" name="calibration_done_date" required>
+        <input type="date" name="next_due_date" required>
+        <input type="number" step="0.01" name="cost" placeholder="Calibration Cost">
+        <input type="text" name="remarks" placeholder="Remarks">
+
+        <button class="btn btn-primary">Save Calibration</button>
+    </form>
+</div>
