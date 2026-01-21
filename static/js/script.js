@@ -25,3 +25,28 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
+document.addEventListener("DOMContentLoaded", () => {
+    const docTypeSelect = document.getElementById("document_type");
+    const otherGroup = document.getElementById("other_doc_group");
+    const otherInput = document.getElementById("other_document_type");
+
+    if (!docTypeSelect) return;
+
+    docTypeSelect.addEventListener("change", () => {
+        if (docTypeSelect.value === "Other") {
+            otherGroup.style.display = "block";
+            otherInput.required = true;
+        } else {
+            otherGroup.style.display = "none";
+            otherInput.required = false;
+            otherInput.value = "";
+        }
+    });
+
+    // Before submit → override value cleanly
+    docTypeSelect.form.addEventListener("submit", () => {
+        if (docTypeSelect.value === "Other" && otherInput.value.trim()) {
+            docTypeSelect.value = otherInput.value.trim();
+        }
+    });
+});
