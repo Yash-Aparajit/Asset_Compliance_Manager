@@ -98,3 +98,154 @@ class Asset(db.Model):
     def __repr__(self):
         return f"<Asset {self.asset_code} | {self.asset_name}>"
     
+# -------------------------
+# AMC (ANNUAL MAINTENANCE CONTRACT)
+# -------------------------
+class AMC(db.Model):
+    __tablename__ = "amcs"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("assets.id"),
+        nullable=False,
+        index=True
+    )
+
+    start_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    end_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    yearly_cost = db.Column(
+        db.Float,
+        nullable=True
+    )
+
+    is_completed = db.Column(
+        db.Boolean,
+        default=False,
+        nullable=False
+    )
+
+    is_cancelled = db.Column(
+        db.Boolean,
+        default=False,
+        nullable=False
+    )
+
+    completed_on = db.Column(
+        db.Date,
+        nullable=True
+    )
+
+    created_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    # RELATIONSHIP
+    asset = db.relationship(
+        "Asset",
+        backref=db.backref("amcs", lazy=True)
+    )
+
+    def __repr__(self):
+        return f"<AMC Asset={self.asset_id} {self.start_date} → {self.end_date}>"
+
+# -------------------------
+# AMC EVENTS
+# -------------------------
+class AMCEvent(db.Model):
+    __tablename__ = "amc_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    amc_id = db.Column(
+        db.Integer,
+        db.ForeignKey("amcs.id"),
+        nullable=False,
+        index=True
+    )
+
+    event_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    remarks = db.Column(
+        db.Text,
+        nullable=True
+    )
+
+    cost = db.Column(
+        db.Float,
+        nullable=True
+    )
+
+    created_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    amc = db.relationship(
+        "AMC",
+        backref=db.backref("events", lazy=True, cascade="all, delete-orphan")
+    )
+
+    def __repr__(self):
+        return f"<AMCEvent AMC={self.amc_id} {self.event_date}>"
+
+# -------------------------
+# AMC DOCUMENTS
+# -------------------------
+class AMCDocument(db.Model):
+    __tablename__ = "amc_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    amc_id = db.Column(
+        db.Integer,
+        db.ForeignKey("amcs.id"),
+        nullable=False,
+        index=True
+    )
+
+    document_type = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    stored_filename = db.Column(
+        db.String(255),
+        nullable=False,
+        unique=True
+    )
+
+    original_filename = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    uploaded_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    amc = db.relationship(
+        "AMC",
+        backref=db.backref("documents", lazy=True, cascade="all, delete-orphan")
+    )
+
+    def __repr__(self):
+        return f"<AMCDocument {self.stored_filename}>"
+
