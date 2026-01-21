@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card header-card">
+    <div class="header-left">
+        <div style="display:flex; align-items:center; gap:30px;">
+            <span class="status-pill status-pill-lg {{ status_key }}">
+                {{ status_label }}
+            </span>
+            <h1 style="margin:0;">
+                AMC — {{ amc.asset.id }} {{ amc.asset.asset_name }}
+            </h1>
+        </div>
+    </div>
+</div>
+
+{% if status_key == "overdue" %}
+<div class="card">
+    <div class="muted-text" style="color:#dc2626;font-weight:600;">
+        ⚠ AMC end date has passed. Please complete or cancel this AMC.
+    </div>
+</div>
+{% endif %}
+
+<div class="two-column-grid">
+    <!-- ASSET DETAILS -->
+        <div class="card">
+            <h3>Asset Details</h3>
+
+            <table class="asset-table">
+                <tr><th>Asset Code</th><td>{{ amc.asset.asset_code }}</td></tr>
+                <tr><th>Serial No</th><td>{{ amc.asset.serial_no or "-" }}</td></tr>
+                <tr><th>Plant</th><td>{{ amc.asset.plant or "-" }}</td></tr>
+                <tr><th>Department</th><td>{{ amc.asset.department or "-" }}</td></tr>
+                <tr><th>Location</th><td>{{ amc.asset.location or "-" }}</td></tr>
+                <tr><th>Purchase Date</th><td>{{ format_date_indian(amc.asset.purchase_date) }}</td></tr>
+                <tr><th>Equipment Age</th><td>{{ asset_age or "-" }}</td></tr>
+            </table>
+        </div>
+    <!-- AMC SUMMARY -->
+        <div class="card card-front">
+            <h3>AMC Summary</h3>
+
+            <table class="asset-table">
+                <tr><th>Start Date</th><td>{{ format_date_indian(amc.start_date) }}</td></tr>
+                <tr><th>End Date</th><td>{{ format_date_indian(amc.end_date) }}</td></tr>
+                <tr><th>Days Left</th><td>{{ days_left }}</td></tr>
+                <tr><th>Yearly Cost</th><td>₹ {{ amc.yearly_cost or "-" }}</td></tr>
+            </table>
+        </div>
+</div>
+
+{% if not amc.is_completed and not amc.is_cancelled %}
+
+<!-- ADD EVENT -->
+<div class="card">
+    <h3>Add Event</h3>
+
+    <form method="POST" action="{{ url_for('amc_add_event', amc_id=amc.id) }}">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Event Date</label>
+                <input type="date" name="event_date" required>
+            </div>
+
+            <div class="form-group">
+                <label>Remarks</label>
+                <input type="text" name="remarks">
+            </div>
+
+            <div class="form-group">
+                <label>Amount (₹)</label>
+                <input type="number" step="0.01" name="cost">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-primary">Save Event</button>
+        </div>
+    </form>
+</div>
+
+{% endif %}
+
+<!-- EVENT HISTORY -->
+<div class="card">
+    <h3>Event History</h3>
+
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Remarks</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in amc.events %}
+            <tr>
+                <td>{{ format_date_indian(e.event_date) }}</td>
+                <td>{{ e.remarks or "-" }}</td>
+                <td>{{ e.cost or "-" }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">No events</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if not amc.is_completed and not amc.is_cancelled %}
+
+<!-- DOCUMENT UPLOAD -->
+<div class="card">
+    <h3>Upload Document</h3>
+
+    <form method="POST" enctype="multipart/form-data"
+          action="{{ url_for('amc_upload_document', amc_id=amc.id) }}">
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Document Type</label>
+                <select name="document_type" id="document_type" required>
+                    <option value="">Select Type</option>
+                    <option value="PO">PO</option>
+                    <option value="Invoice">Invoice</option>
+                    <option value="Certificate">Certificate</option>
+                    <option value="Delivery Challan">Delivery Challan</option>
+                    <option value="Quote">Quote</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="other_doc_group" style="display:none;">
+                <label>Specify Document Type</label>
+                <input type="text"
+                        name="other_document_type"
+                        id="other_document_type"
+                        placeholder="Enter document type">
+            </div>
+
+            <div class="form-group">
+                <label>PDF File</label>
+                <input type="file" name="file" accept=".pdf" required class="file-drop">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-primary">Upload</button>
+        </div>
+    </form>
+</div>
+
+{% endif %}
+
+<!-- DOCUMENT HISTORY -->
+<div class="card">
+    <h3>Document History</h3>
+
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Type</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in amc.documents %}
+            <tr>
+                <td>{{ d.stored_filename }}</td>
+                <td>{{ d.document_type }}</td>
+                <td>
+                    <a href="{{ url_for('amc_download_document', doc_id=d.id) }}"
+                       class="btn btn-secondary">
+                        View
+                    </a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">No documents</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if not amc.is_completed and not amc.is_cancelled %}
+<div class="card">
+    <button class="btn btn-primary" onclick="confirmComplete()">Mark Completed</button>
+    <button class="btn btn-secondary" onclick="confirmCancel()">Cancel AMC</button>
+</div>
+{% endif %}
+
+<script>
+function confirmComplete() {
+    if (confirm("Do you really want to mark this AMC as completed?")) {
+        window.location.href = "{{ url_for('amc_complete', amc_id=amc.id) }}";
+    }
+}
+
+function confirmCancel() {
+    if (confirm("Do you really want to mark this AMC as cancelled?")) {
+        window.location.href = "{{ url_for('amc_cancel', amc_id=amc.id) }}";
+    }
+}
+
+const docTypeSelect = document.getElementById("document_type");
+const otherGroup = document.getElementById("other_doc_group");
+
+if (docTypeSelect) {
+    docTypeSelect.addEventListener("change", () => {
+        otherGroup.style.display =
+            docTypeSelect.value === "Other" ? "block" : "none";
+    });
+}
+
+</script>
+{% endblock %}
