@@ -73,6 +73,7 @@ def parse_indian_date(val):
 
 def get_amc_status(amc):
     today = date.today()
+    days_left = (amc.end_date - today).days
 
     if amc.is_completed:
         return ("completed", "Completed")
@@ -80,8 +81,11 @@ def get_amc_status(amc):
     if amc.is_cancelled:
         return ("cancelled", "Cancelled")
 
-    if today > amc.end_date:
+    if days_left < 0:
         return ("overdue", "Overdue")
+
+    if days_left <= 30:
+        return ("warning", "Expiring Soon")
 
     return ("active", "Active")
 
@@ -638,6 +642,15 @@ def amc_view(amc_id):
     if asset.purchase_date:
         asset_age = (today - asset.purchase_date).days
 
+    # ---- AMC TOTAL SPEND CALCULATION ----
+    event_total = sum(
+        e.cost or 0
+        for e in amc.events
+    )
+
+    contract_value = amc.yearly_cost or 0
+    total_spend = contract_value + event_total
+
     return render_template(
         "amc_view.html",
         amc=amc,
@@ -646,6 +659,9 @@ def amc_view(amc_id):
         status_label=status_label,
         asset_age=asset_age,
         days_left=days_left,
+        contract_value=contract_value,
+        event_total=event_total,
+        total_spend=total_spend,
         today=today
     )
 
@@ -713,20 +729,23 @@ def amc_upload_document(amc_id):
         return redirect(url_for("amc_view", amc_id=amc.id))
 
     asset_code = amc.asset.asset_code
-    upload_date = datetime.today().strftime("%d-%m-%y")
     month_year = datetime.today().strftime("%m-%Y")
 
+    safe_doc_type = doc_type.replace(" ", "_")
 
-    base_name = f"{month_year}_AMC_{asset_code}_{doc_type}_{upload_date}"
+    # ---- sequence per AMC + document type ----
+    existing_count = AMCDocument.query.filter_by(
+        amc_id=amc.id,
+        document_type=doc_type
+    ).count()
 
-    seq = 1
-    stored_filename = f"{base_name}_{seq}.pdf"
+    seq = existing_count + 1
+
+    stored_filename = (
+        f"{month_year}_AMC_{asset_code}_{safe_doc_type}_{seq}.pdf"
+    )
+
     file_path = os.path.join(AMC_DOC_DIR, stored_filename)
-
-    while os.path.exists(file_path):
-        seq += 1
-        stored_filename = f"{base_name}_{seq}.pdf"
-        file_path = os.path.join(AMC_DOC_DIR, stored_filename)
 
     file.save(file_path)
 
@@ -782,8 +801,8 @@ def amc_complete(amc_id):
 
     db.session.commit()
 
-    flash("AMC marked as completed", "success")
-    return redirect(url_for("amc_view", amc_id=amc.id))
+    flash("AMC marked as completed", "successfully !!")
+    return redirect(url_for("amc_create"))
 
 
 # -------------------------------------------------
@@ -803,8 +822,8 @@ def amc_cancel(amc_id):
 
     db.session.commit()
 
-    flash("AMC marked as cancelled", "success")
-    return redirect(url_for("amc_view", amc_id=amc.id))
+    flash("AMC marked as cancelled", "successfully !!")
+    return redirect(url_for("amc_create"))
 
 
 # -------------------------------------------------
