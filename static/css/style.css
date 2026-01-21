@@ -347,6 +347,11 @@ input:focus, select:focus {
     font-size: 18px;
 }
 
+.status-pill.warning {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
 /* =====================
    LOGIN
 ===================== */
@@ -583,4 +588,28 @@ textarea:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+}
+
+/*=====================
+    Flash Messages
+=====================*/
+
+.flash-container {
+    margin-bottom: 20px;
+}
+
+.flash.success {
+    background: #ecfdf5;
+    color: #065f46;
+    border-left: 6px solid #16a34a;
+    padding: 14px 18px;
+    font-weight: 600;
+}
+
+.flash.danger {
+    background: #fff1f2;
+    color: #7f1d1d;
+    border-left: 6px solid #dc2626;
+    padding: 14px 18px;
+    font-weight: 700;
 }
