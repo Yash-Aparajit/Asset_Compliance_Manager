@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Calibration</h1>
+
+<div class="card">
+    <label>Select Asset</label>
+    <input type="text" id="assetSearch" placeholder="Search asset...">
+    <div id="assetResults"></div>
+</div>
+
+<div id="calibrationContent"></div>
+
+<script>
+document.getElementById("assetSearch").addEventListener("input", function () {
+    const value = this.value.toLowerCase();
+    fetch(`/assets?search=${value}`)
+        .then(res => res.text())
+        .then(html => {
+            document.getElementById("assetResults").innerHTML = html;
+        });
+});
+</script>
+
+{% endblock %}
