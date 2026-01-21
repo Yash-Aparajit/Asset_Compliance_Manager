@@ -5,7 +5,7 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
-from models import db, User, Asset, AMC, AMCEvent, AMCDocument
+from models import db, User, Asset, AMC, AMCEvent, AMCDocument, Calibration, CalibrationEvent, CalibrationDocument
 from datetime import datetime, date
 
 import pandas as pd
@@ -38,6 +38,8 @@ AMC_DOC_DIR = os.path.join(DATA_DIR, "AMC")
 
 os.makedirs(AMC_DOC_DIR, exist_ok=True)
 
+CALIBRATION_DOC_DIR = os.path.join(DATA_DIR, "Calibration")
+os.makedirs(CALIBRATION_DOC_DIR, exist_ok=True)
 
 # -------------------------------------------------
 # Utility Helpers
@@ -824,6 +826,78 @@ def amc_cancel(amc_id):
 
     flash("AMC marked as cancelled", "successfully !!")
     return redirect(url_for("amc_create"))
+
+
+# -------------------------------------------------
+# CALIBRATION MAIN PAGE
+# -------------------------------------------------
+
+@app.route("/calibration")
+@login_required
+def calibration_page():
+    assets = Asset.query.order_by(Asset.id.asc()).all()
+    return render_template("calibration.html", assets=assets)
+
+@app.route("/calibration/asset/<int:asset_id>")
+@login_required
+def calibration_asset_data(asset_id):
+    asset = Asset.query.get_or_404(asset_id)
+
+    latest_cal = (
+        Calibration.query
+        .filter_by(asset_id=asset.id)
+        .order_by(
+            Calibration.calibration_done_date.desc(),
+            Calibration.created_on.desc()
+        )
+        .first()
+    )
+
+    return render_template(
+        "calibration_asset.html",
+        asset=asset,
+        latest_cal=latest_cal
+    )
+
+
+@app.route("/calibration/save", methods=["POST"])
+@login_required
+def save_calibration():
+    asset_id = request.form.get("asset_id")
+    done_date = request.form.get("calibration_done_date")
+    next_due = request.form.get("next_due_date")
+    cost = request.form.get("cost")
+    remarks = request.form.get("remarks")
+
+    asset = Asset.query.get_or_404(asset_id)
+
+    if asset.status == "Scrapped":
+        flash("No calibration can be recorded for scrapped assets", "danger")
+        return redirect(url_for("calibration_page"))
+
+    done_date = datetime.strptime(done_date, "%Y-%m-%d").date()
+    next_due = datetime.strptime(next_due, "%Y-%m-%d").date()
+
+    if next_due <= done_date:
+        flash(
+            "Next calibration due date must be after calibration date",
+            "danger"
+        )
+        return redirect(url_for("calibration_page"))
+
+    cal = Calibration(
+        asset_id=asset.id,
+        calibration_done_date=done_date,
+        next_due_date=next_due,
+        cost=float(cost) if cost else None,
+        remarks=remarks
+    )
+
+    db.session.add(cal)
+    db.session.commit()
+
+    flash("Calibration recorded successfully", "success")
+    return redirect(url_for("calibration_page"))
 
 
 # -------------------------------------------------
