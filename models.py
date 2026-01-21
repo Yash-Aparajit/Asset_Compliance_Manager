@@ -249,3 +249,153 @@ class AMCDocument(db.Model):
     def __repr__(self):
         return f"<AMCDocument {self.stored_filename}>"
 
+# -------------------------
+# CALIBRATION (RECORD-BASED)
+# -------------------------
+class Calibration(db.Model):
+    __tablename__ = "calibrations"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("assets.id"),
+        nullable=False,
+        index=True
+    )
+
+    calibration_done_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    next_due_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    cost = db.Column(
+        db.Float,
+        nullable=True
+    )
+
+    remarks = db.Column(
+        db.Text,
+        nullable=True
+    )
+
+    created_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    asset = db.relationship(
+        "Asset",
+        backref=db.backref("calibrations", lazy=True)
+    )
+
+    def __repr__(self):
+        return (
+            f"<Calibration Asset={self.asset_id} "
+            f"{self.calibration_done_date} → {self.next_due_date}>"
+        )
+
+
+# -------------------------
+# CALIBRATION EVENTS
+# -------------------------
+class CalibrationEvent(db.Model):
+    __tablename__ = "calibration_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    calibration_id = db.Column(
+        db.Integer,
+        db.ForeignKey("calibrations.id"),
+        nullable=False,
+        index=True
+    )
+
+    event_date = db.Column(
+        db.Date,
+        nullable=False
+    )
+
+    remarks = db.Column(
+        db.Text,
+        nullable=True
+    )
+
+    cost = db.Column(
+        db.Float,
+        nullable=True
+    )
+
+    created_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    calibration = db.relationship(
+        "Calibration",
+        backref=db.backref(
+            "events",
+            lazy=True,
+            cascade="all, delete-orphan"
+        )
+    )
+
+    def __repr__(self):
+        return f"<CalibrationEvent Cal={self.calibration_id} {self.event_date}>"
+
+
+# -------------------------
+# CALIBRATION DOCUMENTS
+# -------------------------
+class CalibrationDocument(db.Model):
+    __tablename__ = "calibration_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    calibration_id = db.Column(
+        db.Integer,
+        db.ForeignKey("calibrations.id"),
+        nullable=False,
+        index=True
+    )
+
+    document_type = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    stored_filename = db.Column(
+        db.String(255),
+        nullable=False,
+        unique=True
+    )
+
+    original_filename = db.Column(
+        db.String(255),
+        nullable=False
+    )
+
+    uploaded_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    calibration = db.relationship(
+        "Calibration",
+        backref=db.backref(
+            "documents",
+            lazy=True,
+            cascade="all, delete-orphan"
+        )
+    )
+
+    def __repr__(self):
+        return f"<CalibrationDocument {self.stored_filename}>"
