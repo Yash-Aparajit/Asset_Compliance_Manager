@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}AMC History | ACM{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="card header-card">
+    <div class="header-left">
+        <h1>AMC History</h1>
+        <p class="muted-text">
+            Completed & Cancelled AMC records (read-only)
+        </p>
+    </div>
+</div>
+
+<!-- FILTERS -->
+<div class="card filter-card">
+    <form method="GET" class="filter-form">
+
+        <div class="filter-row">
+
+            <div class="form-group">
+                <label>Asset</label>
+                <select name="asset_id">
+                    <option value="">All Assets</option>
+                    {% for asset in assets %}
+                        <option value="{{ asset.id }}"
+                            {% if selected_asset and selected_asset|int == asset.id %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ asset.asset_code }} — {{ asset.asset_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Status</label>
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="completed"
+                        {% if selected_status == "completed" %}selected{% endif %}>
+                        Completed
+                    </option>
+                    <option value="cancelled"
+                        {% if selected_status == "cancelled" %}selected{% endif %}>
+                        Cancelled
+                    </option>
+                </select>
+            </div>
+
+            <div class="filter-actions-inline">
+                <button class="btn btn-primary">Apply</button>
+                <a href="{{ url_for('history') }}" class="btn btn-secondary">
+                    Reset
+                </a>
+            </div>
+
+        </div>
+    </form>
+</div>
+
+<!-- AMC HISTORY TABLE -->
+<div class="card table-card">
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Asset Code</th>
+                <th>Asset Name</th>
+                <th>AMC Period</th>
+                <th>Status</th>
+                <th>Closed On</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+
+        {% if amcs %}
+            {% for amc in amcs %}
+                <tr>
+                    <td class="mono">{{ amc.asset.asset_code }}</td>
+                    <td>{{ amc.asset.asset_name }}</td>
+
+                    <td>
+                        {{ format_date_indian(amc.start_date) }}
+                        →
+                        {{ format_date_indian(amc.end_date) }}
+                    </td>
+
+                    <td>
+                        {% if amc.is_completed %}
+                            <span class="status-pill completed">Completed</span>
+                        {% else %}
+                            <span class="status-pill cancelled">Cancelled</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {{ format_date_indian(amc.completed_on) }}
+                    </td>
+
+                    <td class="actions">
+                        <a href="{{ url_for('history_amc_view', amc_id=amc.id) }}"
+                           class="btn btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="6" class="empty-state">
+                    No AMC history found
+                </td>
+            </tr>
+        {% endif %}
+
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
