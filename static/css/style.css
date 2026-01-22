@@ -280,7 +280,7 @@ input:focus, select:focus {
     color: #475569;
     padding: 10px;
     border-bottom: 2px solid var(--border);
-    text-align: left;
+    text-align: center;
 }
 
 .asset-table th:nth-child(2),
@@ -292,7 +292,7 @@ input:focus, select:focus {
     padding: 12px 10px;
     border-bottom: 1px solid var(--border);
     font-size: 16px;
-    text-align: left;
+    text-align: center;
 }
 
 .asset-name {
