@@ -610,13 +610,18 @@ def amc_create():
         return redirect(url_for("amc_view", amc_id=amc.id))
 
     amc_status_map = {}
+    today = date.today()
 
     for amc in active_amcs:
         status_key, status_label = get_amc_status(amc)
+        days_left = (amc.end_date - today).days
+
         amc_status_map[amc.id] = {
             "key": status_key,
-            "label": status_label
+            "label": status_label,
+            "days_left": days_left
         }
+
 
     return render_template(
         "amc_create.html",
@@ -834,7 +839,7 @@ def amc_cancel(amc_id):
 
 @app.route("/calibration")
 @login_required
-def calibration_page():
+def calibration():
     assets = Asset.query.order_by(Asset.id.asc()).all()
     return render_template("calibration.html", assets=assets)
 
@@ -843,7 +848,7 @@ def calibration_page():
 def calibration_asset_data(asset_id):
     asset = Asset.query.get_or_404(asset_id)
 
-    latest_cal = (
+    latest = (
         Calibration.query
         .filter_by(asset_id=asset.id)
         .order_by(
@@ -853,52 +858,261 @@ def calibration_asset_data(asset_id):
         .first()
     )
 
-    return render_template(
-        "calibration_asset.html",
-        asset=asset,
-        latest_cal=latest_cal
+    today = date.today()
+
+    asset_age = (
+        (today - asset.purchase_date).days
+        if asset.purchase_date else None
     )
 
+    if latest:
+        last_done = format_date_indian(latest.calibration_done_date)
+        next_due = format_date_indian(latest.next_due_date)
+        days_left = (latest.next_due_date - today).days
+    else:
+        last_done = next_due = days_left = "-"
+
+    return {
+        "asset": {
+            "id": asset.id,
+            "asset_code": asset.asset_code,
+            "asset_name": asset.asset_name,
+            "serial_no": asset.serial_no,
+            "plant": asset.plant,
+            "department": asset.department,
+            "location": asset.location,
+            "purchase_date": format_date_indian(asset.purchase_date),
+        },
+        "asset_age": asset_age,
+        "last_done": last_done,
+        "next_due": next_due,
+        "days_left": days_left,
+    }
 
 @app.route("/calibration/save", methods=["POST"])
 @login_required
 def save_calibration():
     asset_id = request.form.get("asset_id")
-    done_date = request.form.get("calibration_done_date")
-    next_due = request.form.get("next_due_date")
-    cost = request.form.get("cost")
-    remarks = request.form.get("remarks")
-
     asset = Asset.query.get_or_404(asset_id)
 
     if asset.status == "Scrapped":
-        flash("No calibration can be recorded for scrapped assets", "danger")
-        return redirect(url_for("calibration_page"))
+        flash("Cannot record calibration for scrapped asset", "danger")
+        return redirect(url_for("calibration"))
 
-    done_date = datetime.strptime(done_date, "%Y-%m-%d").date()
-    next_due = datetime.strptime(next_due, "%Y-%m-%d").date()
+    done_date = datetime.strptime(
+        request.form["calibration_done_date"], "%Y-%m-%d"
+    ).date()
 
-    if next_due <= done_date:
-        flash(
-            "Next calibration due date must be after calibration date",
-            "danger"
+    next_due = datetime.strptime(
+        request.form["next_due_date"], "%Y-%m-%d"
+    ).date()
+
+    if next_due <= done_date or next_due <= date.today():
+        flash("Invalid next calibration due date", "danger")
+        return redirect(url_for("calibration"))
+
+    try:
+        cal = Calibration(
+            asset_id=asset.id,
+            calibration_done_date=done_date,
+            next_due_date=next_due,
+            cost=request.form.get("cost") or None,
+            remarks=request.form.get("remarks"),
         )
-        return redirect(url_for("calibration_page"))
 
-    cal = Calibration(
-        asset_id=asset.id,
-        calibration_done_date=done_date,
-        next_due_date=next_due,
-        cost=float(cost) if cost else None,
-        remarks=remarks
+        db.session.add(cal)
+        db.session.flush()   
+
+        # --------------------
+        # DOCUMENTS
+        # --------------------
+        files = request.files
+        doc_index = 0
+
+        while True:
+            file = files.get(f"documents[{doc_index}][file]")
+            if not file:
+                break
+
+            doc_type = request.form.get(f"documents[{doc_index}][type]")
+            stored_filename = os.path.basename(
+                request.form.get(f"documents[{doc_index}][filename]")
+            )
+
+            file_path = os.path.join(CALIBRATION_DOC_DIR, stored_filename)
+            file.save(file_path)
+
+            doc = CalibrationDocument(
+                calibration_id=cal.id,
+                document_type=doc_type,
+                stored_filename=stored_filename,
+                original_filename=file.filename
+            )
+
+            db.session.add(doc)
+            doc_index += 1
+
+        # --------------------
+        # EVENTS
+        # --------------------
+        idx = 0
+        while f"event_date_{idx}" in request.form:
+            event = CalibrationEvent(
+                calibration_id=cal.id,
+                event_date=datetime.strptime(
+                    request.form[f"event_date_{idx}"], "%Y-%m-%d"
+                ).date(),
+                remarks=request.form.get(f"event_remarks_{idx}"),
+                cost=request.form.get(f"event_cost_{idx}") or None
+            )
+            db.session.add(event)
+            idx += 1
+
+        # --------------------
+        # FINAL COMMIT
+        # --------------------
+        db.session.commit()
+    
+        flash("Calibration recorded successfully", "success")
+        return redirect(url_for("calibration"))
+
+    except Exception as e:
+        db.session.rollback()
+        flash("Calibration save failed. No data was recorded.", "danger")
+        return redirect(url_for("calibration"))
+
+ 
+# -------------------------------------------------
+# HISTORY ROUTES
+# -------------------------------------------------
+    
+@app.route("/history")
+@login_required
+def history():
+    assets = Asset.query.order_by(Asset.asset_code.asc()).all()
+
+    asset_id = request.args.get("asset_id")
+    status = request.args.get("status")  # completed / cancelled / all
+
+    query = AMC.query.join(Asset)
+
+    # ---- HARD RULE: ONLY CLOSED AMC ----
+    query = query.filter(
+        (AMC.is_completed == True) | (AMC.is_cancelled == True)
     )
 
-    db.session.add(cal)
-    db.session.commit()
+    if asset_id:
+        query = query.filter(AMC.asset_id == asset_id)
 
-    flash("Calibration recorded successfully", "success")
-    return redirect(url_for("calibration_page"))
+    if status == "completed":
+        query = query.filter(AMC.is_completed == True)
 
+    if status == "cancelled":
+        query = query.filter(AMC.is_cancelled == True)
+
+    amcs = query.order_by(AMC.completed_on.desc()).all()
+
+    return render_template(
+        "history_amc_list.html",
+        assets=assets,
+        amcs=amcs,
+        selected_asset=asset_id,
+        selected_status=status
+    )
+
+@app.route("/history/amc/<int:amc_id>")
+@login_required
+def history_amc_view(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+
+    # ---- SAFETY GUARD ----
+    if not amc.is_completed and not amc.is_cancelled:
+        flash("Active AMC cannot be viewed in history", "danger")
+        return redirect(url_for("history"))
+
+    asset = amc.asset
+
+    event_total = sum(e.cost or 0 for e in amc.events)
+    contract_value = amc.yearly_cost or 0
+    total_spend = contract_value + event_total
+
+    asset_age = None
+    if asset.purchase_date:
+        asset_age = (date.today() - asset.purchase_date).days
+
+    return render_template(
+        "history_amc_view.html",
+        amc=amc,
+        asset=asset,
+        asset_age=asset_age,
+        contract_value=contract_value,
+        event_total=event_total,
+        total_spend=total_spend
+    )
+
+@app.route("/history/amc/<int:amc_id>/export")
+@login_required
+def export_amc_history(amc_id):
+    amc = AMC.query.get_or_404(amc_id)
+
+    if not amc.is_completed and not amc.is_cancelled:
+        flash("Active AMC cannot be exported", "danger")
+        return redirect(url_for("history"))
+
+    import zipfile
+    from io import BytesIO
+    import pandas as pd
+
+    buffer = BytesIO()
+
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+
+        # -------- SUMMARY EXCEL --------
+        summary = {
+            "Asset Code": amc.asset.asset_code,
+            "Asset Name": amc.asset.asset_name,
+            "AMC Start": format_date_indian(amc.start_date),
+            "AMC End": format_date_indian(amc.end_date),
+            "Status": "Completed" if amc.is_completed else "Cancelled",
+            "Contract Value": amc.yearly_cost or 0,
+        }
+
+        df_summary = pd.DataFrame([summary])
+        summary_xlsx = BytesIO()
+        df_summary.to_excel(summary_xlsx, index=False)
+        z.writestr("summary/amc_summary.xlsx", summary_xlsx.getvalue())
+
+        # -------- EVENTS EXCEL --------
+        events = [{
+            "Date": format_date_indian(e.event_date),
+            "Remarks": e.remarks,
+            "Cost": e.cost
+        } for e in amc.events]
+
+        df_events = pd.DataFrame(events)
+        events_xlsx = BytesIO()
+        df_events.to_excel(events_xlsx, index=False)
+        z.writestr("events/amc_events.xlsx", events_xlsx.getvalue())
+
+        # -------- DOCUMENTS --------
+        for d in amc.documents:
+            path = os.path.join(AMC_DOC_DIR, d.stored_filename)
+            if os.path.exists(path):
+                z.write(
+                    path,
+                    arcname=f"documents/{d.stored_filename}"
+                )
+
+    buffer.seek(0)
+
+    filename = f"AMC_{amc.asset.asset_code}_{amc.id}.zip"
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip"
+    )
 
 # -------------------------------------------------
 # RUN
