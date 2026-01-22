@@ -64,6 +64,8 @@
                 <th>Asset ID</th>
                 <th>Asset Name</th>
                 <th>Start Date</th>
+                <th>End Date</th>
+                <th>Days Left</th>
                 <th>Status</th>
                 <th>Action</th>
             </tr>
@@ -78,6 +80,14 @@
                     </td>
 
                     <td>{{ format_date_indian(amc.start_date) }}</td>
+
+                    <td>{{ format_date_indian(amc.end_date) }}</td>
+
+                    <td>
+                        <span class="days-left {{ amc_status_map[amc.id].key }}">
+                            {{ amc_status_map[amc.id].days_left }}
+                        </span>
+                    </td>
 
                     <td>
                         {% set st = amc_status_map.get(amc.id) %}
