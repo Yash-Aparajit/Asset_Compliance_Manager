@@ -1,25 +1,349 @@
 {% extends "base.html" %}
 {% block content %}
 
-<h1>Calibration</h1>
+<h1>Calibration (Record Only)</h1>
 
+<!-- =========================
+ ASSET SELECTOR
+========================= -->
 <div class="card">
-    <label>Select Asset</label>
-    <input type="text" id="assetSearch" placeholder="Search asset...">
-    <div id="assetResults"></div>
+    <label><b>Select Asset *</b></label>
+    <select id="assetSelect" class="full-width">
+        <option value="">-- Select Asset --</option>
+        {% for asset in assets %}
+            <option value="{{ asset.id }}">
+                {{ asset.asset_code }} — {{ asset.asset_name }}
+            </option>
+        {% endfor %}
+    </select>
 </div>
 
-<div id="calibrationContent"></div>
+<form id="calibrationForm" method="POST" action="/calibration/save" enctype="multipart/form-data">
+    <input type="hidden" name="asset_id" id="asset_id">
+
+    <div id="calibrationPanel" style="display:none;"></div>
+</form>
 
 <script>
-document.getElementById("assetSearch").addEventListener("input", function () {
-    const value = this.value.toLowerCase();
-    fetch(`/assets?search=${value}`)
-        .then(res => res.text())
-        .then(html => {
-            document.getElementById("assetResults").innerHTML = html;
-        });
+const assetSelect = document.getElementById("assetSelect");
+const panel = document.getElementById("calibrationPanel");
+const assetIdInput = document.getElementById("asset_id");
+
+let events = [];
+let documents = [];
+
+assetSelect.addEventListener("change", () => {
+    const assetId = assetSelect.value;
+    if (!assetId) {
+        panel.style.display = "none";
+        panel.innerHTML = "";
+        return;
+    }
+
+    assetIdInput.value = assetId;
+
+    fetch(`/calibration/asset/${assetId}`)
+        .then(res => res.json())
+        .then(data => renderPanel(data));
 });
+
+function renderPanel(data) {
+    events = [];
+    documents = [];
+
+    panel.style.display = "block";
+    panel.innerHTML = `
+
+    <!-- ASSET + SUMMARY -->
+    <div class="two-column-grid">
+        <div class="card">
+            <h3>Asset Details</h3>
+            <table class="asset-table">
+                <tr><th>Asset Code</th><td>${data.asset.asset_code}</td></tr>
+                <tr><th>Name</th><td>${data.asset.asset_name}</td></tr>
+                <tr><th>Serial No</th><td>${data.asset.serial_no || "-"}</td></tr>
+                <tr><th>Plant</th><td>${data.asset.plant || "-"}</td></tr>
+                <tr><th>Department</th><td>${data.asset.department || "-"}</td></tr>
+                <tr><th>Location</th><td>${data.asset.location || "-"}</td></tr>
+                <tr><th>Purchase Date</th><td>${data.asset.purchase_date}</td></tr>
+                <tr><th>Asset Age (days)</th><td>${data.asset_age ?? "-"}</td></tr>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3>Last Calibration Summary</h3>
+            <table class="asset-table">
+                <tr><th>Last Done</th><td>${data.last_done}</td></tr>
+                <tr><th>Next Due</th><td>${data.next_due}</td></tr>
+                <tr><th>Days Left</th><td>${data.days_left}</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- RECORD CALIBRATION -->
+    <div class="card">
+        <h3>Record Calibration</h3>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Calibration Done Date *</label>
+                <input type="date" name="calibration_done_date" required>
+            </div>
+
+            <div class="form-group">
+                <label>Next Calibration Due Date *</label>
+                <input type="date" name="next_due_date" required>
+            </div>
+
+            <div class="form-group">
+                <label>Calibration Cost</label>
+                <input type="number" step="0.01" name="cost">
+            </div>
+
+            <div class="form-group">
+                <label>Remarks</label>
+                <input type="text" name="remarks">
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD EVENT -->
+    <div class="card">
+        <h3>Add Event (Optional)</h3>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Event Date</label>
+                <input type="date" id="event_date">
+            </div>
+
+            <div class="form-group">
+                <label>Remarks</label>
+                <input type="text" id="event_remarks">
+            </div>
+
+            <div class="form-group">
+                <label>Additional Cost</label>
+                <input type="number" step="0.01" id="event_cost">
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-secondary" onclick="addEvent()">Add Event</button>
+
+        <div id="eventPreview"></div>
+    </div>
+
+    <!-- UPLOAD DOCUMENT -->
+    <div class="card">
+        <h3>Upload Document (Optional)</h3>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Document Type</label>
+                <select id="doc_type">
+                    <option value="">Select</option>
+                    <option value="Certificate">Certificate</option>
+                    <option value="Invoice">Invoice</option>
+                    <option value="Report">Report</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>PDF File</label>
+                <input type="file" id="doc_file" accept="application/pdf">
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-secondary" onclick="addDocument()">Add Document</button>
+
+        <div id="docPreview"></div>
+    </div>
+
+    <!-- SUBMIT -->
+    <div class="form-actions">
+        <button type="button" class="btn btn-primary" onclick="saveCalibration()">
+            Save Calibration
+        </button>
+        <button type="reset" class="btn btn-secondary" onclick="resetForm()">Cancel</button>
+    </div>
+    `;
+}
+
+function addEvent() {
+    const d = document.getElementById("event_date").value;
+    if (!d) return alert("Event date required");
+
+    events.push({
+        event_date: d,
+        remarks: document.getElementById("event_remarks").value,
+        cost: document.getElementById("event_cost").value
+    });
+
+    document.getElementById("event_date").value = "";
+    document.getElementById("event_remarks").value = "";
+    document.getElementById("event_cost").value = "";
+
+    renderEventPreview();
+}
+
+function renderEventPreview() {
+    if (!events.length) {
+        document.getElementById("eventPreview").innerHTML = "";
+        return;
+    }
+
+    document.getElementById("eventPreview").innerHTML = `
+    <table class="asset-table">
+        <tr><th>Date</th><th>Remarks</th><th>Cost</th></tr>
+        ${events.map(e => `
+            <tr>
+                <td>${e.event_date}</td>
+                <td>${e.remarks || "-"}</td>
+                <td>${e.cost || "-"}</td>
+            </tr>`).join("")}
+    </table>
+    `;
+}
+
+function addDocument() {
+    const type = document.getElementById("doc_type").value;
+    const fileInput = document.getElementById("doc_file");
+    const file = fileInput.files[0];
+
+    if (!type || !file) {
+        alert("Document type and PDF file required");
+        return;
+    }
+
+    const index = documents.length;
+
+    // ---- system generated filename preview ----
+    const assetCode =
+        assetSelect.options[assetSelect.selectedIndex]
+            .text.split("—")[0].trim();
+
+    const monthYear = new Date().toLocaleDateString("en-GB", {
+        month: "2-digit",
+        year: "numeric"
+    }).replace("/", "-");
+
+    const generatedName =
+        `${monthYear}_Calibration_${assetCode}_${type}_${index + 1}.pdf`;
+
+
+    documents.push({
+        type: type,
+        filename: generatedName,
+        file: file
+    });
+
+    // ---- reset visible inputs ----
+    fileInput.value = "";
+    document.getElementById("doc_type").value = "";
+
+    renderDocPreview();
+}
+
+
+function renderDocPreview() {
+    if (!documents.length) {
+        document.getElementById("docPreview").innerHTML = "";
+        return;
+    }
+
+    document.getElementById("docPreview").innerHTML = `
+        <table class="asset-table">
+            <tr>
+                <th>Document Type</th>
+                <th>Generated Filename</th>
+                <th>Action</th>
+            </tr>
+            ${documents.map(d => `
+                <tr>
+                    <td>${d.type}</td>
+                    <td>${d.filename}</td>
+                    <td>
+                        <span class="muted-text">Will be available after save</span>
+                    </td>
+                </tr>
+            `).join("")}
+        </table>
+    `;
+}
+
+function saveCalibration() {
+
+    const done = document.querySelector("[name='calibration_done_date']").value;
+    const next = document.querySelector("[name='next_due_date']").value;
+
+    if (!done || !next) {
+        alert("Calibration done date and next due date are required");
+        return;
+    }
+
+    const formData = new FormData();
+
+    // calibration fields
+    formData.append("asset_id", assetSelect.value);
+    formData.append(
+        "calibration_done_date",
+        document.querySelector("[name='calibration_done_date']").value
+    );
+    formData.append(
+        "next_due_date",
+        document.querySelector("[name='next_due_date']").value
+    );
+    formData.append(
+        "cost",
+        document.querySelector("[name='cost']").value
+    );
+    formData.append(
+        "remarks",
+        document.querySelector("[name='remarks']").value
+    );
+
+    // documents
+    documents.forEach((d, i) => {
+        formData.append(`documents[${i}][file]`, d.file);
+        formData.append(`documents[${i}][type]`, d.type);
+        formData.append(`documents[${i}][filename]`, d.filename);
+    });
+
+    // events
+    events.forEach((e, i) => {
+        formData.append(`event_date_${i}`, e.event_date);
+        formData.append(`event_remarks_${i}`, e.remarks || "");
+        formData.append(`event_cost_${i}`, e.cost || "");
+    });
+
+    fetch("/calibration/save", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Save failed");
+
+        alert("Calibration saved successfully");
+        window.location.reload();
+    })
+    .catch(err => {
+        alert("Calibration save failed");
+    });
+}
+
+function resetForm() {
+    events = [];
+    documents = [];
+
+    panel.innerHTML = "";
+    panel.style.display = "none";
+
+    assetSelect.value = "";
+
+    // reset actual form
+    document.getElementById("calibrationForm").reset();
+}
+
 </script>
 
 {% endblock %}
