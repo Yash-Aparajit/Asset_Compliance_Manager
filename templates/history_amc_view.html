@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}AMC History View | ACM{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="card header-card">
+    <div class="header-left">
+        <h1>
+            AMC History —
+            {{ amc.asset.asset_code }} {{ amc.asset.asset_name }}
+        </h1>
+        <p class="muted-text">
+            Read-only historical record
+        </p>
+    </div>
+
+    <div class="header-actions">
+        <a href="{{ url_for('history') }}" class="btn btn-secondary">
+            ← Back
+        </a>
+
+        <a href="{{ url_for('export_amc_history', amc_id=amc.id) }}"
+           class="btn btn-primary">
+            Export
+        </a>
+    </div>
+</div>
+
+<!-- STATUS -->
+<div class="card">
+    {% if amc.is_completed %}
+        <span class="status-pill status-pill-lg completed">Completed</span>
+    {% else %}
+        <span class="status-pill status-pill-lg cancelled">Cancelled</span>
+    {% endif %}
+</div>
+
+<!-- ASSET + AMC SUMMARY -->
+<div class="two-column-grid">
+
+    <!-- ASSET DETAILS -->
+    <div class="card">
+        <h3>Asset Details</h3>
+        <table class="asset-table">
+            <tr><th>Asset Code</th><td>{{ asset.asset_code }}</td></tr>
+            <tr><th>Asset Name</th><td>{{ asset.asset_name }}</td></tr>
+            <tr><th>Serial No</th><td>{{ asset.serial_no or "-" }}</td></tr>
+            <tr><th>Plant</th><td>{{ asset.plant or "-" }}</td></tr>
+            <tr><th>Department</th><td>{{ asset.department or "-" }}</td></tr>
+            <tr><th>Location</th><td>{{ asset.location or "-" }}</td></tr>
+            <tr><th>Purchase Date</th>
+                <td>{{ format_date_indian(asset.purchase_date) }}</td>
+            </tr>
+            <tr><th>Equipment Age</th>
+                <td>{{ asset_age }} days</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- AMC SUMMARY -->
+    <div class="card">
+        <h3>AMC Summary</h3>
+        <table class="asset-table">
+            <tr>
+                <th>AMC Period</th>
+                <td>
+                    {{ format_date_indian(amc.start_date) }}
+                    →
+                    {{ format_date_indian(amc.end_date) }}
+                </td>
+            </tr>
+
+            <tr>
+                <th>Contract Value</th>
+                <td>₹ {{ contract_value }}</td>
+            </tr>
+
+            <tr>
+                <th>Event Spend</th>
+                <td>₹ {{ event_total }}</td>
+            </tr>
+
+            <tr>
+                <th>Total Spend</th>
+                <td><strong>₹ {{ total_spend }}</strong></td>
+            </tr>
+
+            <tr>
+                <th>Closed On</th>
+                <td>{{ format_date_indian(amc.completed_on) }}</td>
+            </tr>
+        </table>
+    </div>
+
+</div>
+
+<!-- EVENT HISTORY -->
+<div class="card">
+    <h3>Event History</h3>
+
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Remarks</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in amc.events %}
+                <tr>
+                    <td>{{ format_date_indian(e.event_date) }}</td>
+                    <td>{{ e.remarks or "-" }}</td>
+                    <td>{{ e.cost or "-" }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3">No events recorded</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- DOCUMENT HISTORY -->
+<div class="card">
+    <h3>Document History</h3>
+
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Type</th>
+                <th>View</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in amc.documents %}
+                <tr>
+                    <td>{{ d.stored_filename }}</td>
+                    <td>{{ d.document_type }}</td>
+                    <td>
+                        <a href="{{ url_for('amc_download_document', doc_id=d.id) }}"
+                           target="_blank"
+                           class="btn btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3">No documents uploaded</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
