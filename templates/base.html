@@ -24,8 +24,16 @@
             AMC
         </a>
 
-        <span class="nav-disabled">Calibration</span>
-        <span class="nav-disabled">History</span>
+        <a href="{{ url_for('calibration') }}"
+        class="{% if request.path.startswith('/calibration') %}active{% endif %}">
+            Calibration
+        </a>
+
+        <a href="{{ url_for('history') }}"
+        class="{% if request.path.startswith('/history') %}active{% endif %}">
+            History
+        </a>
+
         <span class="nav-disabled">Scrap</span>
         <span class="nav-disabled">Reminders</span>
     </nav>
