@@ -43,8 +43,17 @@ assetSelect.addEventListener("change", () => {
     assetIdInput.value = assetId;
 
     fetch(`/calibration/asset/${assetId}`)
-        .then(res => res.json())
-        .then(data => renderPanel(data));
+    .then(res => {
+        if (!res.ok) throw new Error("Asset not allowed");
+        return res.json();
+    })
+    .then(data => renderPanel(data))
+    .catch(() => {
+        alert("This asset cannot be calibrated");
+        assetSelect.value = "";
+        panel.style.display = "none";
+    });
+
 });
 
 function renderPanel(data) {
@@ -285,14 +294,8 @@ function saveCalibration() {
 
     // calibration fields
     formData.append("asset_id", assetSelect.value);
-    formData.append(
-        "calibration_done_date",
-        document.querySelector("[name='calibration_done_date']").value
-    );
-    formData.append(
-        "next_due_date",
-        document.querySelector("[name='next_due_date']").value
-    );
+    formData.append("calibration_done_date", done);
+    formData.append("next_due_date", next);
     formData.append(
         "cost",
         document.querySelector("[name='cost']").value
@@ -316,18 +319,28 @@ function saveCalibration() {
         formData.append(`event_cost_${i}`, e.cost || "");
     });
 
+    const btn = document.querySelector(".btn-primary");
+    btn.disabled = true;
+
     fetch("/calibration/save", {
         method: "POST",
         body: formData
     })
-    .then(res => {
-        if (!res.ok) throw new Error("Save failed");
+    .then(res => res.json())
+    .then(data => {
+        if (!data.success) {
+            alert(data.message);
+            btn.disabled = false;
+            return;
+        }
 
-        alert("Calibration saved successfully");
-        window.location.reload();
+        alert(data.message);
+        resetForm();
+        btn.disabled = false;
     })
-    .catch(err => {
-        alert("Calibration save failed");
+    .catch(() => {
+        alert("Unexpected error while saving calibration");
+        btn.disabled = false;
     });
 }
 
