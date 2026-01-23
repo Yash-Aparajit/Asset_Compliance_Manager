@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Calibration History | ACM{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="card header-card">
+    <div class="header-left">
+        <h1>Calibration History</h1>
+        <p class="muted-text">
+            Read-only calibration records (including scrapped assets)
+        </p>
+    </div>
+</div>
+
+<!-- FILTERS -->
+<div class="card filter-card">
+    <form method="GET" class="filter-form">
+        <div class="filter-row">
+
+            <div class="form-group">
+                <label>Asset</label>
+                <select name="asset_id">
+                    <option value="">All Assets</option>
+                    {% for asset in assets %}
+                        <option value="{{ asset.id }}"
+                            {% if selected_asset and selected_asset|int == asset.id %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ asset.asset_code }} — {{ asset.asset_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-actions-inline">
+                <button class="btn btn-primary">Apply</button>
+                <a href="{{ url_for('history_calibration_list') }}"
+                   class="btn btn-secondary">
+                    Reset
+                </a>
+            </div>
+
+        </div>
+    </form>
+</div>
+
+<!-- TABLE -->
+<div class="card table-card">
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Asset Code</th>
+                <th>Asset Name</th>
+                <th>Calibration Date</th>
+                <th>Next Due Date</th>
+                <th>Days Left</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+
+        {% if calibrations %}
+            {% for c in calibrations %}
+                {% set days_left = days_left_map[c.id] %}
+                {% set status = status_map[c.id] %}
+                <tr class="{% if status == 'superseded' %}row-superseded{% endif %}">
+
+                    <td class="mono">{{ c.asset.asset_code }}</td>
+                    <td>{{ c.asset.asset_name }}</td>
+
+                    <td>{{ format_date_indian(c.calibration_done_date) }}</td>
+                    <td>{{ format_date_indian(c.next_due_date) }}</td>
+
+                    <td>
+                        <strong class="{% if days_left < 0 %}text-danger{% endif %}">
+                            {{ days_left }}
+                        </strong>
+                    </td>
+
+                    <td>
+                        {% if status == "superseded" %}
+                            <span class="text-muted">Superseded</span>
+                        {% elif status == "overdue" %}
+                            <span class="status-pill overdue">Overdue</span>
+                        {% else %}
+                            <span class="status-pill active">Valid</span>
+                        {% endif %}
+                    </td>
+
+                    <td class="actions">
+                        <a href="{{ url_for('history_calibration_view', calibration_id=c.id) }}"
+                           class="btn btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="7" class="empty-state">
+                    No calibration history found
+                </td>
+            </tr>
+        {% endif %}
+
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
