@@ -613,3 +613,55 @@ textarea:focus {
     padding: 14px 18px;
     font-weight: 700;
 }
+
+.history-toggle {
+    display: inline-flex;
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 4px;
+    margin-bottom: 20px;
+    gap: 4px;
+}
+
+.toggle-btn {
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    color: #475569;
+    text-decoration: none;
+    transition: all 0.25s ease;
+}
+
+.toggle-btn:hover {
+    background: #e2e8f0;
+}
+
+.toggle-btn.active {
+    background: white;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Superseded calibration rows */
+.row-superseded {
+    background-color: #e2e2e2;   
+    color: #6b717e;              
+}
+
+.row-superseded td {
+    font-style: italic;
+}
+
+.text-danger {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+.row-scrapped {
+    background: #fde8ec;     /* rose-pink */
+    color: #7f1d1d;
+}
+
+.row-scrapped td {
+    font-style: italic;
+}
