@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Calibration History View | ACM{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="card header-card">
+    <div class="header-left">
+        <h1>
+            Calibration History —
+            {{ asset.asset_code }} {{ asset.asset_name }}
+        </h1>
+        <p class="muted-text">
+            Read-only historical record
+        </p>
+    </div>
+
+    <div class="header-actions">
+        <a href="{{ url_for('history_calibration_list') }}"
+           class="btn btn-secondary">
+            ← Back
+        </a>
+
+        <a href="{{ url_for('export_calibration_history', calibration_id=calibration.id) }}"
+           class="btn btn-primary">
+            Export
+        </a>
+    </div>
+</div>
+
+<!-- STATUS -->
+<div class="card">
+    {% if days_left < 0 %}
+        <span class="status-pill status-pill-lg overdue">Overdue</span>
+    {% else %}
+        <span class="status-pill status-pill-lg active">Valid</span>
+    {% endif %}
+</div>
+
+<!-- ASSET + CALIBRATION SUMMARY -->
+<div class="two-column-grid">
+
+    <!-- ASSET DETAILS -->
+    <div class="card">
+        <h3>Asset Details</h3>
+        <table class="asset-table">
+            <tr><th>Asset Code</th><td>{{ asset.asset_code }}</td></tr>
+            <tr><th>Asset Name</th><td>{{ asset.asset_name }}</td></tr>
+            <tr><th>Serial No</th><td>{{ asset.serial_no or "-" }}</td></tr>
+            <tr><th>Plant</th><td>{{ asset.plant or "-" }}</td></tr>
+            <tr><th>Department</th><td>{{ asset.department or "-" }}</td></tr>
+            <tr><th>Location</th><td>{{ asset.location or "-" }}</td></tr>
+            <tr>
+                <th>Purchase Date</th>
+                <td>{{ format_date_indian(asset.purchase_date) }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- CALIBRATION SUMMARY -->
+    <div class="card">
+        <h3>Calibration Summary</h3>
+        <table class="asset-table">
+            <tr>
+                <th>Calibration Done</th>
+                <td>{{ format_date_indian(calibration.calibration_done_date) }}</td>
+            </tr>
+            <tr>
+                <th>Next Due Date</th>
+                <td>{{ format_date_indian(calibration.next_due_date) }}</td>
+            </tr>
+            <tr>
+                <th>Days Left</th>
+                <td>
+                    <strong class="{% if days_left < 0 %}text-danger{% endif %}">
+                        {{ days_left }}
+                    </strong>
+                </td>
+            </tr>
+            <tr>
+                <th>Cost</th>
+                <td>₹ {{ calibration.cost or "-" }}</td>
+            </tr>
+
+            <tr>
+                <th>Event Spend</th>
+                <td>₹ {{ event_total or "-" }}</td>
+            </tr>
+
+            <tr>
+                <th>Total Spend</th>
+                <td><strong>₹ {{ total_spend or "-" }}</strong></td>
+            </tr>
+        </table>
+    </div>
+
+</div>
+
+<!-- EVENT HISTORY -->
+<div class="card">
+    <h3>Event History</h3>
+
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Remarks</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for e in calibration.events %}
+                <tr>
+                    <td>{{ format_date_indian(e.event_date) }}</td>
+                    <td>{{ e.remarks or "-" }}</td>
+                    <td>{{ e.cost or "-" }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3">No events recorded</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- DOCUMENT HISTORY -->
+<div class="card">
+    <h3>Document History</h3>
+
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>File Name</th>
+                <th>Type</th>
+                <th>View</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in calibration.documents %}
+                <tr>
+                    <td>{{ d.stored_filename }}</td>
+                    <td>{{ d.document_type }}</td>
+                    <td>
+                        <a href="{{ url_for('amc_download_document', doc_id=d.id) }}"
+                           target="_blank"
+                           class="btn btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="3">No documents uploaded</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
