@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Scrap Asset | ACM{% endblock %}
+
+{% block content %}
+
+<div class="card header-card">
+    <div class="header-left">
+        <h1>Scrap Asset</h1>
+        <p class="muted-text">
+            Permanent decommissioning with approval record
+        </p>
+    </div>
+</div>
+
+<div class="card">
+<form method="POST" enctype="multipart/form-data">
+
+    <div class="form-grid">
+
+        <div class="form-group">
+            <label>Asset</label>
+            <select name="asset_id" required>
+                <option value="">Select Asset</option>
+                {% for asset in assets %}
+                    <option value="{{ asset.id }}">
+                        {{ asset.asset_code }} — {{ asset.asset_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Scrap Date</label>
+            <input type="date" name="scrap_date" required>
+        </div>
+
+        <div class="form-group">
+            <label>Approved By</label>
+            <input type="text"
+                   name="approved_by"
+                   placeholder="Authority name"
+                   required>
+        </div>
+
+        <div class="form-group">
+            <label>Scrap Note (PDF)</label>
+            <input type="file"
+                   name="scrap_note"
+                   accept=".pdf"
+                   required>
+        </div>
+
+    </div>
+
+    <div class="form-actions">
+        <button class="btn btn-primary"
+                onclick="return confirm('This action is irreversible. Proceed?')">
+            Scrap Asset
+        </button>
+        <a href="{{ url_for('asset_master') }}"
+           class="btn btn-secondary">
+            Cancel
+        </a>
+    </div>
+
+</form>
+</div>
+
+{% endblock %}
