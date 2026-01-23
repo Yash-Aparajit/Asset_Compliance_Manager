@@ -34,8 +34,13 @@
             History
         </a>
 
-        <span class="nav-disabled">Scrap</span>
+        <a href="{{ url_for('scrap_asset') }}"
+        class="{% if request.path.startswith('/scrap') %}active{% endif %}">
+            Scrap
+        </a>
+
         <span class="nav-disabled">Reminders</span>
+        <span class="nav-disabled">Backup's & Restore</span>
     </nav>
 
     <div class="topbar-right">
@@ -59,6 +64,21 @@
             </div>
         {% endif %}
     {% endwith %}
+
+    {% if request.path.startswith('/history') %}
+    <div class="history-toggle">
+        <a href="{{ url_for('history') }}"
+        class="toggle-btn {% if request.path == '/history' %}active{% endif %}">
+            AMC History
+        </a>
+
+        <a href="{{ url_for('history_calibration_list') }}"
+        class="toggle-btn {% if request.path.startswith('/history/calibration') %}active{% endif %}">
+            Calibration History
+        </a>
+    </div>
+    {% endif %}
+
 
     {% block content %}{% endblock %}
 
