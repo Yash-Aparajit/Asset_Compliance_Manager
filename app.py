@@ -5,8 +5,9 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
-from models import db, User, Asset, AMC, AMCEvent, AMCDocument, Calibration, CalibrationEvent, CalibrationDocument
+from models import db, User, Asset, AMC, AMCEvent, AMCDocument, Calibration, CalibrationEvent, CalibrationDocument, AssetScrap
 from datetime import datetime, date
+from flask import jsonify
 
 import pandas as pd
 import os
@@ -281,6 +282,10 @@ def add_asset():
 def edit_asset(asset_id):
     asset = Asset.query.get_or_404(asset_id)
 
+    if asset.status == "Scrapped":
+        flash("Scrapped assets cannot be edited", "danger")
+        return redirect(url_for("asset_master"))
+    
     if request.method == "POST":
         new_code = request.form.get("asset_code").strip()
 
@@ -840,13 +845,18 @@ def amc_cancel(amc_id):
 @app.route("/calibration")
 @login_required
 def calibration():
-    assets = Asset.query.order_by(Asset.id.asc()).all()
+    assets = Asset.query.filter_by(status="Active").order_by(Asset.id.asc()).all()
     return render_template("calibration.html", assets=assets)
 
 @app.route("/calibration/asset/<int:asset_id>")
 @login_required
 def calibration_asset_data(asset_id):
     asset = Asset.query.get_or_404(asset_id)
+    if asset.status == "Scrapped":
+        return jsonify({
+            "success": False,
+            "message": "Asset is scrapped"
+        }), 400
 
     latest = (
         Calibration.query
@@ -896,8 +906,10 @@ def save_calibration():
     asset = Asset.query.get_or_404(asset_id)
 
     if asset.status == "Scrapped":
-        flash("Cannot record calibration for scrapped asset", "danger")
-        return redirect(url_for("calibration"))
+        return jsonify({
+            "success": False,
+            "message": "Cannot record calibration for scrapped asset"
+        }), 400
 
     done_date = datetime.strptime(
         request.form["calibration_done_date"], "%Y-%m-%d"
@@ -908,8 +920,11 @@ def save_calibration():
     ).date()
 
     if next_due <= done_date or next_due <= date.today():
-        flash("Invalid next calibration due date", "danger")
-        return redirect(url_for("calibration"))
+        return jsonify({
+            "success": False,
+            "message": "Next calibration due date must be after calibration date and today"
+        }), 400
+
 
     try:
         cal = Calibration(
@@ -973,17 +988,21 @@ def save_calibration():
         # --------------------
         db.session.commit()
     
-        flash("Calibration recorded successfully", "success")
-        return redirect(url_for("calibration"))
+        return jsonify({
+            "success": True,
+            "message": "Calibration recorded successfully"
+        })
 
     except Exception as e:
         db.session.rollback()
-        flash("Calibration save failed. No data was recorded.", "danger")
-        return redirect(url_for("calibration"))
+        return jsonify({
+            "success": False,
+            "message": "Calibration save failed. No data was recorded."
+        }), 500
 
  
 # -------------------------------------------------
-# HISTORY ROUTES
+# HISTORY ROUTES (AMC)
 # -------------------------------------------------
     
 @app.route("/history")
@@ -1010,7 +1029,11 @@ def history():
     if status == "cancelled":
         query = query.filter(AMC.is_cancelled == True)
 
-    amcs = query.order_by(AMC.completed_on.desc()).all()
+    # LEDGER ORDER — latest closed first
+    amcs = query.order_by(
+        AMC.completed_on.desc(),
+        AMC.created_on.desc()
+    ).all()
 
     return render_template(
         "history_amc_list.html",
@@ -1113,6 +1136,245 @@ def export_amc_history(amc_id):
         download_name=filename,
         mimetype="application/zip"
     )
+
+
+# -------------------------------------------------
+# HISTORY ROUTES (Calibration)
+# -------------------------------------------------
+
+@app.route("/history/calibration")
+@login_required
+def history_calibration_list():
+    assets = Asset.query.order_by(Asset.asset_code.asc()).all()
+    asset_id = request.args.get("asset_id")
+
+    query = Calibration.query.join(Asset)
+
+    if asset_id:
+        query = query.filter(Calibration.asset_id == asset_id)
+
+    # LEDGER ORDER — latest entry first
+    calibrations = query.order_by(
+        Calibration.created_on.desc(),
+        Calibration.calibration_done_date.desc()
+    ).all()
+
+    today = date.today()
+
+    # ---- FIND LATEST CALIBRATION PER ASSET ----
+    latest_per_asset = {}
+    for c in calibrations:
+        if c.asset_id not in latest_per_asset:
+            latest_per_asset[c.asset_id] = c.id
+
+    days_left_map = {}
+    status_map = {}
+
+    for c in calibrations:
+        days_left = (c.next_due_date - today).days
+        days_left_map[c.id] = days_left
+
+        if c.id != latest_per_asset[c.asset_id]:
+            status_map[c.id] = "superseded"
+        else:
+            if days_left < 0:
+                status_map[c.id] = "overdue"
+            else:
+                status_map[c.id] = "valid"
+
+    return render_template(
+        "history_calibration_list.html",
+        assets=assets,
+        calibrations=calibrations,
+        days_left_map=days_left_map,
+        status_map=status_map,
+        selected_asset=asset_id
+    )
+
+@app.route("/history/calibration/<int:calibration_id>")
+@login_required
+def history_calibration_view(calibration_id):
+    calibration = Calibration.query.get_or_404(calibration_id)
+    asset = calibration.asset
+
+    days_left = (calibration.next_due_date - date.today()).days
+
+    if days_left < 0:
+        status = "Overdue"
+    elif days_left == 0:
+        status = "Due Today"
+    else:
+        status = "Valid"
+
+
+    event_total = sum(e.cost or 0 for e in calibration.events)
+    calibration_cost = calibration.cost or 0
+    total_spend = calibration_cost + event_total
+
+    return render_template(
+        "history_calibration_view.html",
+        calibration=calibration,
+        asset=asset,
+        days_left=days_left,
+        status=status,
+        event_total=event_total,
+        calibration_cost=calibration_cost,
+        total_spend=total_spend
+    )
+
+@app.route("/history/calibration/<int:calibration_id>/export")
+@login_required
+def export_calibration_history(calibration_id):
+    calibration = Calibration.query.get_or_404(calibration_id)
+
+    import zipfile
+    from io import BytesIO
+
+    buffer = BytesIO()
+
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+
+        # -------- SUMMARY --------
+        summary = {
+            "Asset Code": calibration.asset.asset_code,
+            "Asset Name": calibration.asset.asset_name,
+            "Calibration Date": format_date_indian(
+                calibration.calibration_done_date
+            ),
+            "Next Due Date": format_date_indian(
+                calibration.next_due_date
+            ),
+            "Cost": calibration.cost or 0,
+            "Remarks": calibration.remarks or "-"
+        }
+
+        df_summary = pd.DataFrame([summary])
+        summary_xlsx = BytesIO()
+        df_summary.to_excel(summary_xlsx, index=False)
+        z.writestr("summary/calibration_summary.xlsx", summary_xlsx.getvalue())
+
+        # -------- EVENTS --------
+        events = [{
+            "Date": format_date_indian(e.event_date),
+            "Remarks": e.remarks,
+            "Cost": e.cost
+        } for e in calibration.events]
+
+        df_events = pd.DataFrame(events)
+        events_xlsx = BytesIO()
+        df_events.to_excel(events_xlsx, index=False)
+        z.writestr("events/calibration_events.xlsx", events_xlsx.getvalue())
+
+        # -------- DOCUMENTS --------
+        for d in calibration.documents:
+            path = os.path.join(CALIBRATION_DOC_DIR, d.stored_filename)
+            if os.path.exists(path):
+                z.write(
+                    path,
+                    arcname=f"documents/{d.stored_filename}"
+                )
+
+    buffer.seek(0)
+
+    filename = f"Calibration_{calibration.asset.asset_code}_{calibration.id}.zip"
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/zip"
+    )
+
+# -------------------------------------------------
+# SCRAP ASSET
+# -------------------------------------------------
+
+SCRAP_DOC_DIR = os.path.join(DATA_DIR, "Scrap")
+os.makedirs(SCRAP_DOC_DIR, exist_ok=True)
+
+
+@app.route("/scrap", methods=["GET", "POST"])
+@login_required
+@role_required(["developer", "purchase"])
+def scrap_asset():
+
+    # Only ACTIVE assets can be scrapped
+    assets = (
+        Asset.query
+        .filter_by(status="Active")
+        .order_by(Asset.asset_code.asc())
+        .all()
+    )
+
+    if request.method == "POST":
+        asset_id = request.form.get("asset_id")
+        scrap_date = request.form.get("scrap_date")
+        approved_by = request.form.get("approved_by")
+        file = request.files.get("scrap_note")
+
+        asset = Asset.query.get_or_404(asset_id)
+
+        # ---- HARD SAFETY ----
+        if asset.status == "Scrapped":
+            flash("Asset is already scrapped", "danger")
+            return redirect(url_for("scrap_asset"))
+
+        if not scrap_date or not approved_by or not file:
+            flash("All fields are mandatory", "danger")
+            return redirect(url_for("scrap_asset"))
+
+        if not file.filename.lower().endswith(".pdf"):
+            flash("Scrap note must be a PDF file", "danger")
+            return redirect(url_for("scrap_asset"))
+
+        scrap_date = datetime.strptime(scrap_date, "%Y-%m-%d").date()
+
+        # ---- STORE DOCUMENT ----
+        filename = (
+            f"{scrap_date}_SCRAP_{asset.asset_code}.pdf"
+        )
+        file_path = os.path.join(SCRAP_DOC_DIR, filename)
+        file.save(file_path)
+
+        try:
+            # ---- CREATE SCRAP RECORD ----
+            scrap = AssetScrap(
+                asset_id=asset.id,
+                scrap_date=scrap_date,
+                approved_by=approved_by.strip(),
+                scrap_note_filename=filename,
+                original_filename=file.filename
+            )
+            db.session.add(scrap)
+
+            # ---- UPDATE ASSET ----
+            asset.status = "Scrapped"
+
+            # ---- AUTO CANCEL ACTIVE AMC ----
+            AMC.query.filter(
+                AMC.asset_id == asset.id,
+                AMC.is_completed == False,
+                AMC.is_cancelled == False
+            ).update({
+                AMC.is_cancelled: True,
+                AMC.completed_on: scrap_date
+            })
+
+            db.session.commit()
+
+            flash("Asset scrapped successfully", "success")
+            return redirect(url_for("scrap_asset"))
+
+        except Exception:
+            db.session.rollback()
+            flash("Scrap failed. No changes were saved.", "danger")
+            return redirect(url_for("scrap_asset"))
+
+    return render_template(
+        "scrap_asset.html",
+        assets=assets
+    )
+
 
 # -------------------------------------------------
 # RUN
