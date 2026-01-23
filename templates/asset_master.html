@@ -115,12 +115,18 @@
                             {{ asset.status }}
                         </span>
                     </td>
+
                     <td class="actions">
-                        <a href="{{ url_for('edit_asset', asset_id=asset.id) }}"
-                        class="link-action">
-                            Edit
-                        </a>
+                        {% if asset.status != "Scrapped" %}
+                            <a href="{{ url_for('edit_asset', asset_id=asset.id) }}"
+                            class="link-action">
+                                Edit
+                            </a>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
                     </td>
+
                 </tr>
                 {% endfor %}
             {% else %}
