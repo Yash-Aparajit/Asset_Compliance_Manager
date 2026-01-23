@@ -354,6 +354,7 @@ class CalibrationEvent(db.Model):
 # -------------------------
 # CALIBRATION DOCUMENTS
 # -------------------------
+
 class CalibrationDocument(db.Model):
     __tablename__ = "calibration_documents"
 
@@ -400,3 +401,30 @@ class CalibrationDocument(db.Model):
     def __repr__(self):
         return f"<CalibrationDocument {self.stored_filename}>"
 
+# -------------------------
+# Asset Scrap
+# -------------------------
+
+class AssetScrap(db.Model):
+    __tablename__ = "asset_scraps"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("assets.id"),
+        nullable=False,
+        unique=True  # one-time action
+    )
+
+    scrap_date = db.Column(db.Date, nullable=False)
+
+    approved_by = db.Column(db.String(150), nullable=False)
+
+    scrap_note_filename = db.Column(db.String(255), nullable=False)
+
+    original_filename = db.Column(db.String(255), nullable=False)
+
+    created_on = db.Column(db.DateTime, default=datetime.utcnow)
+
+    asset = db.relationship("Asset", backref="scrap_record")
