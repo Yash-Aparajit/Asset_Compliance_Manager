@@ -50,3 +50,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 });
+
+function toggleMenu() {
+    const menu = document.getElementById("hamburgerMenu");
+    menu.style.display = menu.style.display === "flex" ? "none" : "flex";
+}
+
+document.addEventListener("click", function (event) {
+    const menu = document.getElementById("hamburgerMenu");
+    const btn = document.querySelector(".hamburger-btn");
+
+    if (!menu || !btn) return;
+
+    if (!menu.contains(event.target) && !btn.contains(event.target)) {
+        menu.style.display = "none";
+    }
+});
