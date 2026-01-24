@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+{% block content %}
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+body {
+    font-family: "Inter", system-ui, sans-serif;
+}
+
+.reminder-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 20px 0 40px;
+}
+
+/* =======================
+ SECTIONS
+======================= */
+.section {
+    padding: 20px;
+    border-radius: 14px;
+    margin-bottom: 32px;
+}
+
+.section-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    margin-bottom: 18px;
+}
+
+.overdue-section {
+    background: #fff1f1;
+    border-left: 6px solid #c62828;
+}
+
+.due-soon-section {
+    background: #fff8e1;
+    border-left: 6px solid #f9a825;
+}
+
+.upcoming-section {
+    background: #eef7ee;
+    border-left: 6px solid #2e7d32;
+}
+
+/* =======================
+ REMINDER CARD
+======================= */
+.reminder-card {
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 18px;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 26px;
+    align-items: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.3s ease;
+}
+
+.reminder-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(0,0,0,0.12);
+}
+
+.overdue-card {
+    animation: pulse 2.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 rgba(198,40,40,0.25); }
+    50% { box-shadow: 0 0 16px rgba(198,40,40,0.45); }
+    100% { box-shadow: 0 0 0 rgba(198,40,40,0.25); }
+}
+
+/* =======================
+ LEFT CONTENT
+======================= */
+.card-main {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 22px;
+    align-items: stretch;
+}
+
+/* TYPE COLUMN */
+.type-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-right: 18px;
+    border-right: 1px solid #e0e0e0;
+    gap: 8px;
+}
+
+.badge {
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 6px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.badge-amc {
+    background: #e3f2fd;
+    color: #0d47a1;
+}
+
+.badge-cal {
+    background: #ede7f6;
+    color: #4527a0;
+}
+
+/* INFO COLUMN */
+.card-text {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.asset-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.asset-id {
+    font-family: monospace;
+    font-weight: 700;
+    color: #444;
+    margin-right: 6px;
+}
+
+.status-text {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.overdue-text { color: #c62828; }
+.due-soon-text { color: #f57f17; }
+.upcoming-text { color: #2e7d32; }
+
+.due-date {
+    font-size: 0.95rem;
+    color: #666;
+}
+
+/* =======================
+ ACTION BUTTON
+======================= */
+.reminder-btn {
+    border: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 170px;
+}
+
+.btn-overdue {
+    background: #c62828;
+    color: #fff;
+}
+
+.btn-due-soon {
+    background: #f9a825;
+    color: #000;
+}
+
+.btn-upcoming {
+    background: #2e7d32;
+    color: #fff;
+}
+
+.reminder-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* =======================
+ EMPTY STATE
+======================= */
+.empty-state {
+    background: #eef7ee;
+    border-left: 6px solid #2e7d32;
+    padding: 30px;
+    border-radius: 14px;
+}
+
+.empty-state h3 {
+    margin: 0 0 8px;
+    font-size: 1.5rem;
+}
+
+.empty-state p {
+    margin: 0;
+    color: #555;
+}
+</style>
+
+<div class="reminder-page">
+
+{% set overdue = reminders | selectattr("severity", "equalto", "overdue") | list %}
+{% set due_soon = reminders | selectattr("severity", "equalto", "due_soon") | list %}
+{% set upcoming = reminders | selectattr("severity", "equalto", "upcoming") | list %}
+
+{% macro card(r, css, btn, text_class) %}
+<div class="reminder-card {{ css }}">
+    <div class="card-main">
+
+        <div class="type-column">
+            <div class="badge {{ 'badge-amc' if r.type == 'AMC' else 'badge-cal' }}">
+                {{ r.type }}
+            </div>
+        </div>
+
+        <div class="card-text">
+            <div class="asset-title">
+                <span class="asset-id">#{{ r.asset_id }}</span>
+                {{ r.asset_name }}
+            </div>
+
+            {% if r.days < 0 %}
+            <div class="status-text overdue-text">
+                Overdue by {{ r.days | abs }} days
+            </div>
+            {% else %}
+            <div class="status-text {{ text_class }}">
+                Due in {{ r.days }} days
+            </div>
+            {% endif %}
+
+            <div class="due-date">
+                Due Date: {{ format_date_indian(r.due_date) }}
+            </div>
+        </div>
+
+    </div>
+
+    <button class="reminder-btn {{ btn }}"
+        onclick="acknowledgeReminder(this,
+            '{{ r.type }}',
+            {{ r.source_id }},
+            '{{ r.rule }}',
+            {{ r.asset_id }}
+        )">
+        Mark as Completed
+    </button>
+</div>
+{% endmacro %}
+
+{% if overdue %}
+<div class="section overdue-section">
+    <div class="section-title overdue-text">🚨 OVERDUE</div>
+    {% for r in overdue %} {{ card(r, "overdue-card", "btn-overdue", "") }} {% endfor %}
+</div>
+{% endif %}
+
+{% if due_soon %}
+<div class="section due-soon-section">
+    <div class="section-title due-soon-text">⚠️ DUE SOON</div>
+    {% for r in due_soon %} {{ card(r, "", "btn-due-soon", "due-soon-text") }} {% endfor %}
+</div>
+{% endif %}
+
+{% if upcoming %}
+<div class="section upcoming-section">
+    <div class="section-title upcoming-text">ℹ️ UPCOMING</div>
+    {% for r in upcoming %} {{ card(r, "", "btn-upcoming", "upcoming-text") }} {% endfor %}
+</div>
+{% endif %}
+
+{% if not reminders %}
+<div class="empty-state">
+    <h3>✔ All compliance items are under control</h3>
+    <p>No pending AMC or Calibration actions.</p>
+</div>
+{% endif %}
+
+</div>
+
+<script>
+function acknowledgeReminder(btn, sourceType, sourceId, rule, assetId) {
+    btn.disabled = true;
+
+    fetch("/reminders/acknowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            source_type: sourceType,
+            source_id: sourceId,
+            rule: rule,
+            asset_id: assetId
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (!d.success) {
+            alert("Failed to acknowledge reminder");
+            btn.disabled = false;
+            return;
+        }
+        const card = btn.closest(".reminder-card");
+        card.style.opacity = "0";
+        setTimeout(() => card.remove(), 300);
+    })
+    .catch(() => {
+        alert("Unexpected error");
+        btn.disabled = false;
+    });
+}
+</script>
+
+{% endblock %}
