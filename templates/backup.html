@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}System Backup{% endblock %}
+
+{% block content %}
+
+<div class="card header-card">
+    <div class="header-left">
+        <h1>System Backup</h1>
+        <div class="muted-text">
+            Create a complete snapshot of the system for safe keeping
+        </div>
+    </div>
+</div>
+
+<div class="card form-card">
+
+    <div class="muted-text" style="margin-bottom: 18px;">
+        This backup contains:
+        <ul style="margin-top: 8px; line-height: 1.6;">
+            <li>All Assets, AMC, Calibration and History data</li>
+            <li>All uploaded documents (PDFs)</li>
+            <li>Reminder acknowledgements and logs</li>
+        </ul>
+        Downloaded backup can be safely stored on your computer or Google Drive.
+    </div>
+
+    <div class="import-box">
+        <p class="muted-text" style="margin-bottom: 16px;">
+            Click below to download a full system backup.
+        </p>
+
+        <a href="{{ url_for('backup') }}" class="btn btn-primary import-confirm">
+            Download Backup
+        </a>
+    </div>
+
+    <div class="muted-text" style="margin-top: 20px;">
+        Tip: Rename the file with today’s date before storing it.
+    </div>
+
+</div>
+
+{% endblock %}
