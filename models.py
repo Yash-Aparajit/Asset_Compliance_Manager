@@ -428,3 +428,70 @@ class AssetScrap(db.Model):
     created_on = db.Column(db.DateTime, default=datetime.utcnow)
 
     asset = db.relationship("Asset", backref="scrap_record")
+
+# -------------------------
+# REMINDER ACKNOWLEDGEMENT
+# -------------------------
+
+class ReminderAck(db.Model):
+    __tablename__ = "reminder_acks"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # AMC or Calibration
+    source_type = db.Column(
+        db.String(20),
+        nullable=False,
+        index=True
+    )  # 'AMC' / 'Calibration'
+
+    # AMC.id or Calibration.id
+    source_id = db.Column(
+        db.Integer,
+        nullable=False,
+        index=True
+    )
+
+    asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("assets.id"),
+        nullable=False,
+        index=True
+    )
+
+    rule = db.Column(
+        db.String(20),
+        nullable=False
+    )  
+    # 'overdue' / 'due_soon' / 'upcoming'
+
+    acknowledged_on = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
+    acknowledged_by = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=True
+    )
+
+    # RELATIONSHIPS (quiet, no cascade madness)
+    asset = db.relationship("Asset")
+    user = db.relationship("User")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "source_type",
+            "source_id",
+            "rule",
+            name="uq_reminder_ack_once"
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f"<ReminderAck {self.source_type} "
+            f"{self.source_id} [{self.rule}]>"
+        )
