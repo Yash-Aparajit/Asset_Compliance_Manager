@@ -1,28 +1,38 @@
+import pandas as pd
+import os
+import zipfile
+import shutil
+
 from flask import (
     Flask, render_template, request,
     redirect, url_for, session, flash, send_file
 )
+
+from models import ( 
+    db, User, Asset, AMC, AMCEvent, AMCDocument, 
+    Calibration, CalibrationEvent, CalibrationDocument, 
+    AssetScrap, ReminderAck )
+
+from datetime import datetime, date
+from flask import jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
-from models import db, User, Asset, AMC, AMCEvent, AMCDocument, Calibration, CalibrationEvent, CalibrationDocument, AssetScrap
-from datetime import datetime, date
-from flask import jsonify
-
-import pandas as pd
-import os
-
 from openpyxl import Workbook
 from io import BytesIO
-
 
 # -------------------------------------------------
 # APP CONFIG
 # -------------------------------------------------
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "acm-secret-key-change-later"
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "app.db")
+
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(DATA_DIR, "app.db")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 
@@ -91,6 +101,18 @@ def get_amc_status(amc):
         return ("warning", "Expiring Soon")
 
     return ("active", "Active")
+
+def is_acknowledged(source_type, source_id, rule):
+    return (
+        ReminderAck.query
+        .filter_by(
+            source_type=source_type,
+            source_id=source_id,
+            rule=rule
+        )
+        .first()
+        is not None
+    )
 
 # -------------------------------------------------
 # ASSET IMPORT SCHEMA
@@ -165,18 +187,31 @@ with app.app_context():
     db.create_all()
     seed_users()
 
+# -------------------------------------------------
+# ROOT ROUTE 
+# -------------------------------------------------
+@app.route("/")
+def root():
+    """
+    Absolute landing route.
+    Forces reminder-first workflow.
+    """
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    return redirect(url_for("reminders"))
+
 
 # -------------------------------------------------
-# LOGIN / LOGOUT
+# LOGIN & LOGOUT
 # -------------------------------------------------
-@app.route("/", methods=["GET", "POST"])
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
 
-        user = User.query.filter_by(username=username, is_active=True).first()
+        user = User.query.filter_by(username=username).first()
 
         if not user or not check_password_hash(user.password_hash, password):
             flash("Invalid credentials", "danger")
@@ -186,17 +221,16 @@ def login():
         session["username"] = user.username
         session["role"] = user.role
 
-        return redirect(url_for("asset_master"))
+        # 🚨 HARD RULE: AFTER LOGIN → REMINDERS
+        return redirect(url_for("reminders"))
 
     return render_template("login.html")
-
 
 @app.route("/logout")
 @login_required
 def logout():
     session.clear()
     return redirect(url_for("login"))
-
 
 # -------------------------------------------------
 # ASSET MASTER
@@ -1031,7 +1065,7 @@ def history():
 
     # LEDGER ORDER — latest closed first
     amcs = query.order_by(
-        AMC.completed_on.desc(),
+        AMC.completed_on.desc().nullslast(),
         AMC.created_on.desc()
     ).all()
 
@@ -1374,6 +1408,294 @@ def scrap_asset():
         "scrap_asset.html",
         assets=assets
     )
+
+
+# -------------------------------
+# REMINDER ROUTES
+# -------------------------------
+@app.route("/reminders")
+@login_required
+def reminders():
+    """
+    Landing page.
+    Reminders are evaluated fresh on every visit.
+    """
+
+    today = date.today()
+    reminders = []
+
+    # --------------------------------
+    # AMC REMINDERS
+    # --------------------------------
+    active_amcs = (
+        AMC.query
+        .join(Asset)
+        .filter(
+            Asset.status == "Active",
+            AMC.is_completed == False,
+            AMC.is_cancelled == False
+        )
+        .all()
+    )
+
+    for amc in active_amcs:
+        days_left = (amc.end_date - today).days
+
+        if days_left < 0:
+            rule = "overdue"
+            severity = "overdue"
+
+        elif 0 <= days_left <= 7:
+            rule = "due_soon"
+            severity = "due_soon"
+
+        elif 8 <= days_left <= 15:
+            rule = "upcoming"
+            severity = "upcoming"
+
+        else:
+            continue
+
+        if not is_acknowledged("AMC", amc.id, rule):
+            reminders.append({
+                "type": "AMC",
+                "severity": severity,
+                "rule": rule,
+                "asset_id": amc.asset.id,
+                "asset_code": amc.asset.asset_code,
+                "asset_name": amc.asset.asset_name,
+                "days": days_left,
+                "due_date": amc.end_date,
+                "source_id": amc.id
+            })
+
+    # --------------------------------
+    # CALIBRATION REMINDERS (LATEST ONLY)
+    # --------------------------------
+    active_assets = Asset.query.filter_by(status="Active").all()
+
+    for asset in active_assets:
+        latest_cal = (
+            Calibration.query
+            .filter_by(asset_id=asset.id)
+            .order_by(
+                Calibration.calibration_done_date.desc(),
+                Calibration.created_on.desc()
+            )
+            .first()
+        )
+
+        if not latest_cal:
+            continue
+
+        days_left = (latest_cal.next_due_date - today).days
+
+        if days_left < 0:
+            rule = "overdue"
+            severity = "overdue"
+
+        elif 0 <= days_left <= 7:
+            rule = "due_soon"
+            severity = "due_soon"
+
+        elif 8 <= days_left <= 15:
+            rule = "upcoming"
+            severity = "upcoming"
+
+        else:
+            continue
+
+        if not is_acknowledged("Calibration", latest_cal.id, rule):
+            reminders.append({
+                "type": "Calibration",
+                "severity": severity,
+                "rule": rule,
+                "asset_id": asset.id,
+                "asset_code": asset.asset_code,
+                "asset_name": asset.asset_name,
+                "days": days_left,
+                "due_date": latest_cal.next_due_date,
+                "source_id": latest_cal.id
+            })
+
+    # --------------------------------
+    # SORT FOR DISPLAY
+    # --------------------------------
+    severity_order = {
+        "overdue": 0,
+        "due_soon": 1,
+        "upcoming": 2
+    }
+
+    reminders.sort(
+        key=lambda r: (
+            severity_order[r["severity"]],
+            abs(r["days"])
+        )
+    )
+
+    return render_template(
+        "reminders.html",
+        reminders=reminders
+    )
+
+@app.route("/reminders/acknowledge", methods=["POST"])
+@login_required
+def acknowledge_reminder():
+
+    source_type = request.json.get("source_type")
+    source_id = request.json.get("source_id")
+    rule = request.json.get("rule")
+
+    if not source_type or not source_id or not rule:
+        return jsonify({
+            "success": False,
+            "message": "Invalid reminder data"
+        }), 400
+
+    # prevent duplicate ACK
+    existing = ReminderAck.query.filter_by(
+        source_type=source_type,
+        source_id=source_id,
+        rule=rule
+    ).first()
+
+    if existing:
+        return jsonify({"success": True})
+
+    if source_type == "AMC":
+        if not AMC.query.get(source_id):
+            return jsonify({"success": False, "message": "Invalid AMC"}), 400
+
+    elif source_type == "Calibration":
+        if not Calibration.query.get(source_id):
+            return jsonify({"success": False, "message": "Invalid Calibration"}), 400
+
+    ack = ReminderAck(
+        source_type=source_type,
+        source_id=source_id,
+        rule=rule,
+        asset_id=request.json.get("asset_id"),
+        acknowledged_by=session.get("user_id")
+    )
+
+    db.session.add(ack)
+    db.session.commit()
+
+    return jsonify({"success": True})
+
+
+# -------------------------------------------------
+# BACKUP 
+# -------------------------------------------------
+
+@app.route("/backup")
+@login_required
+def backup():
+
+    DATA_DIR = os.path.join(BASE_DIR, "data")
+
+    if not os.path.exists(DATA_DIR):
+        flash("Data directory not found. Backup failed.", "danger")
+        return redirect(url_for("reminders"))
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"ACM_Backup_{timestamp}.zip"
+
+    buffer = BytesIO()
+
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(DATA_DIR):
+            for file in files:
+                full_path = os.path.join(root, file)
+
+                # Keep folder structure inside zip
+                arcname = os.path.relpath(full_path, BASE_DIR)
+                zipf.write(full_path, arcname)
+
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=backup_name,
+        mimetype="application/zip"
+    )
+
+
+# -------------------------------------------------
+# CHANGE PASSWORD
+# -------------------------------------------------
+
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    username = session.get("username")
+
+    if request.method == "POST":
+        current = request.form.get("current_password")
+        new = request.form.get("new_password")
+        confirm = request.form.get("confirm_password")
+
+        if not current or not new or not confirm:
+            flash("All fields are required.", "danger")
+            return redirect(url_for("change_password"))
+
+        if new != confirm:
+            flash("New passwords do not match.", "danger")
+            return redirect(url_for("change_password"))
+
+        user = User.query.filter_by(username=username).first()
+
+        if not user or not check_password_hash(user.password_hash, current):
+            flash("Current password is incorrect.", "danger")
+            return redirect(url_for("change_password"))
+
+        user.password_hash = generate_password_hash(new)
+        db.session.commit()
+
+        flash("Password changed successfully.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("change_password.html")
+
+
+# -------------------------------------------------
+# PASSWORD RESET
+# -------------------------------------------------
+
+@app.route("/reset-password", methods=["GET", "POST"])
+@login_required
+def reset_password():
+    role = session.get("role")
+
+    if role != "developer":
+        flash("Access denied.", "danger")
+        return redirect(url_for("index"))
+
+    users = User.query.all()
+
+    if request.method == "POST":
+        username = request.form.get("username")
+        new_password = request.form.get("new_password")
+
+        if not username or not new_password:
+            flash("All fields are required.", "danger")
+            return redirect(url_for("reset_password"))
+
+        user = User.query.filter_by(username=username).first()
+
+        if not user:
+            flash("User not found.", "danger")
+            return redirect(url_for("reset_password"))
+
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+
+        flash(f"Password reset for {username}.", "success")
+        return redirect(url_for("reset_password"))
+
+    return render_template("reset_password.html", users=users)
 
 
 # -------------------------------------------------
