@@ -6,36 +6,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
 <body>
 
-<!-- GLOBAL LOADING OVERLAY -->
 <div id="global-loader" class="loader-overlay hidden">
     <div class="infinity-loader"></div>
     <div class="loader-text">Evaluating Reminders…</div>
 </div>
 
 <nav class="top-nav">
-    <!-- LEFT -->
     <div class="nav-left">
         <span class="logo">ACM</span>
     </div>
 
-    <!-- CENTER -->
     <div class="nav-center">
         <a href="{{ url_for('asset_master') }}">Asset Master</a>
         <a href="{{ url_for('scrap_asset') }}">Scrap</a>
         <a href="{{ url_for('amc_create') }}">AMC</a>
         <a href="{{ url_for('calibration') }}">Calibration</a>
         <a href="{{ url_for('history') }}">History</a>
+        <a href="{{ url_for('history_scrap_list') }}">Scrap History</a>
         <a href="{{ url_for('reminders') }}" class="active">Reminders</a>
     </div>
 
-    <!-- RIGHT -->
     <div class="nav-right">
         <a href="{{ url_for('backup') }}" class="backup-btn">Backup</a>
 
-        <button class="hamburger" onclick="toggleMenu()">☰</button>
+        <button class="hamburger" id="hamburgerBtn" type="button">☰</button>
 
         <div id="hamburgerMenu" class="hamburger-menu">
             <div class="menu-user">
@@ -57,8 +57,6 @@
     </div>
 </nav>
 
-
-<!-- MAIN CONTENT -->
 <main class="main-container page-animate">
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -85,27 +83,47 @@
     </div>
     {% endif %}
 
-
     {% block content %}{% endblock %}
 
 </main>
 
 <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
 <script>
-function toggleMenu() {
+document.addEventListener("DOMContentLoaded", function () {
+
+    
+    const btn = document.getElementById("hamburgerBtn");
     const menu = document.getElementById("hamburgerMenu");
-    menu.style.display = menu.style.display === "block" ? "none" : "block";
-}
 
-document.addEventListener("click", function (e) {
-    const menu = document.getElementById("hamburgerMenu");
-    const button = document.querySelector(".hamburger");
+    if (btn && menu) {
+        btn.addEventListener("click", function () {
+            menu.style.display = (menu.style.display === "block") ? "none" : "block";
+        });
 
-    if (!menu || !button) return;
+        document.addEventListener("click", function (e) {
+            if (!menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.style.display = "none";
+            }
+        });
 
-    if (!menu.contains(e.target) && !button.contains(e.target)) {
-        menu.style.display = "none";
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") {
+                menu.style.display = "none";
+            }
+        });
+    }
+
+    if (window.jQuery && $(".searchable-select").length) {
+        $(".searchable-select").select2({
+            width: "100%",
+            placeholder: "Search...",
+            allowClear: true
+        });
     }
 });
 
