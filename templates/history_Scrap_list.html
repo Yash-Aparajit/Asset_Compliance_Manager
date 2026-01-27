@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Scrap History | ACM{% endblock %}
+
+{% block content %}
+
+<div class="card header-card">
+    <div class="header-left">
+        <h1>Scrap History</h1>
+        <p class="muted-text">Read-only scrap records</p>
+    </div>
+</div>
+
+<div class="card table-card">
+    <table class="asset-table">
+        <thead>
+            <tr>
+                <th>Asset Code</th>
+                <th>Asset Name</th>
+                <th>Scrap Date</th>
+                <th>Approved By</th>
+                <th>Scrap Note</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% if scraps %}
+                {% for s in scraps %}
+                <tr>
+                    <td class="mono">{{ s.asset.asset_code }}</td>
+                    <td>{{ s.asset.asset_name }}</td>
+                    <td>{{ format_date_indian(s.scrap_date) }}</td>
+                    <td>{{ s.approved_by }}</td>
+                    <td>
+                        <a href="{{ url_for('scrap_download', scrap_id=s.id) }}"
+                           target="_blank"
+                           class="btn btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="5" class="empty-state">
+                        No scrap history found
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    {% if pagination %}
+    <div class="pagination-bar">
+        {% if pagination.has_prev %}
+            <a class="btn btn-secondary"
+               href="{{ url_for('history_scrap_list', page=pagination.prev_num) }}">
+               Prev
+            </a>
+        {% endif %}
+
+        <span class="muted-text">
+            Page {{ pagination.page }} of {{ pagination.pages }}
+        </span>
+
+        {% if pagination.has_next %}
+            <a class="btn btn-secondary"
+               href="{{ url_for('history_scrap_list', page=pagination.next_num) }}">
+               Next
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
