@@ -8,7 +8,7 @@
 ========================= -->
 <div class="card">
     <label><b>Select Asset *</b></label>
-    <select id="assetSelect" class="full-width">
+    <select id="assetSelect" class="full-width searchable-select">
         <option value="">-- Select Asset --</option>
         {% for asset in assets %}
             <option value="{{ asset.id }}">
@@ -20,7 +20,6 @@
 
 <form id="calibrationForm" method="POST" action="/calibration/save" enctype="multipart/form-data">
     <input type="hidden" name="asset_id" id="asset_id">
-
     <div id="calibrationPanel" style="display:none;"></div>
 </form>
 
@@ -53,7 +52,6 @@ assetSelect.addEventListener("change", () => {
         assetSelect.value = "";
         panel.style.display = "none";
     });
-
 });
 
 function renderPanel(data) {
@@ -170,7 +168,7 @@ function renderPanel(data) {
 
     <!-- SUBMIT -->
     <div class="form-actions">
-        <button type="button" class="btn btn-primary" onclick="saveCalibration()">
+        <button type="button" id="saveCalBtn" class="btn btn-primary" onclick="saveCalibration()">
             Save Calibration
         </button>
         <button type="reset" class="btn btn-secondary" onclick="resetForm()">Cancel</button>
@@ -226,7 +224,6 @@ function addDocument() {
 
     const index = documents.length;
 
-    // ---- system generated filename preview ----
     const assetCode =
         assetSelect.options[assetSelect.selectedIndex]
             .text.split("—")[0].trim();
@@ -239,20 +236,17 @@ function addDocument() {
     const generatedName =
         `${monthYear}_Calibration_${assetCode}_${type}_${index + 1}.pdf`;
 
-
     documents.push({
         type: type,
         filename: generatedName,
         file: file
     });
 
-    // ---- reset visible inputs ----
     fileInput.value = "";
     document.getElementById("doc_type").value = "";
 
     renderDocPreview();
 }
-
 
 function renderDocPreview() {
     if (!documents.length) {
@@ -281,7 +275,6 @@ function renderDocPreview() {
 }
 
 function saveCalibration() {
-
     const done = document.querySelector("[name='calibration_done_date']").value;
     const next = document.querySelector("[name='next_due_date']").value;
 
@@ -292,34 +285,26 @@ function saveCalibration() {
 
     const formData = new FormData();
 
-    // calibration fields
     formData.append("asset_id", assetSelect.value);
     formData.append("calibration_done_date", done);
     formData.append("next_due_date", next);
-    formData.append(
-        "cost",
-        document.querySelector("[name='cost']").value
-    );
-    formData.append(
-        "remarks",
-        document.querySelector("[name='remarks']").value
-    );
+    formData.append("cost", document.querySelector("[name='cost']").value);
+    formData.append("remarks", document.querySelector("[name='remarks']").value);
 
-    // documents
     documents.forEach((d, i) => {
         formData.append(`documents[${i}][file]`, d.file);
         formData.append(`documents[${i}][type]`, d.type);
         formData.append(`documents[${i}][filename]`, d.filename);
     });
 
-    // events
     events.forEach((e, i) => {
         formData.append(`event_date_${i}`, e.event_date);
         formData.append(`event_remarks_${i}`, e.remarks || "");
         formData.append(`event_cost_${i}`, e.cost || "");
     });
 
-    const btn = document.querySelector(".btn-primary");
+    // ✅ FIXED
+    const btn = document.querySelector("#saveCalBtn");
     btn.disabled = true;
 
     fetch("/calibration/save", {
@@ -352,11 +337,8 @@ function resetForm() {
     panel.style.display = "none";
 
     assetSelect.value = "";
-
-    // reset actual form
     document.getElementById("calibrationForm").reset();
 }
-
 </script>
 
 {% endblock %}
