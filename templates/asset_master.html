@@ -3,7 +3,6 @@
 
 {% block content %}
 
-<!-- PAGE HEADER -->
 <div class="card header-card">
     <div class="header-left">
         <h1>Asset Master</h1>
@@ -20,7 +19,6 @@
     </div>
 </div>
 
-<!-- FILTERS -->
 <div class="card filter-card">
     <form method="GET" class="filter-form">
 
@@ -30,6 +28,7 @@
                 <input
                     type="text"
                     name="search"
+                    id="assetSearchInput"
                     placeholder="Asset ID / Name / Serial No"
                     value="{{ request.args.get('search', '') }}"
                 >
@@ -67,6 +66,7 @@
                     </option>
                 </select>
             </div>
+
             <div class="filter-actions-inline">
                 <button type="submit" class="btn btn-primary">Apply</button>
                 <a href="{{ url_for('asset_master') }}" class="btn btn-secondary">Reset</a>
@@ -75,7 +75,6 @@
     </form>
 </div>
 
-<!-- ASSET LIST -->
 <div class="card table-card">
     <table class="asset-table">
         <thead>
@@ -106,9 +105,7 @@
                     <td>{{ asset.plant or "-" }}</td>
                     <td>{{ asset.department or "-" }}</td>
                     <td>{{ asset.location or "-" }}</td>
-                    <td>
-                        {{ format_date_indian(asset.purchase_date) }}
-                    </td>
+                    <td>{{ format_date_indian(asset.purchase_date) }}</td>
 
                     <td>
                         <span class="status-pill {{ asset.status|lower }}">
@@ -119,14 +116,13 @@
                     <td class="actions">
                         {% if asset.status != "Scrapped" %}
                             <a href="{{ url_for('edit_asset', asset_id=asset.id) }}"
-                            class="link-action">
+                               class="link-action">
                                 Edit
                             </a>
                         {% else %}
                             <span class="text-muted">—</span>
                         {% endif %}
                     </td>
-
                 </tr>
                 {% endfor %}
             {% else %}
@@ -138,6 +134,37 @@
             {% endif %}
         </tbody>
     </table>
+
+    {% if pagination %}
+    <div class="pagination-bar">
+        {% if pagination.has_prev %}
+            <a class="btn btn-secondary"
+               href="{{ url_for('asset_master', page=pagination.prev_num, **request.args) }}">
+               Prev
+            </a>
+        {% endif %}
+
+        <span class="muted-text">
+            Page {{ pagination.page }} of {{ pagination.pages }}
+        </span>
+
+        {% if pagination.has_next %}
+            <a class="btn btn-secondary"
+               href="{{ url_for('asset_master', page=pagination.next_num, **request.args) }}">
+               Next
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
+
+<script>
+document.addEventListener("keydown", function(e) {
+    if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        document.getElementById("assetSearchInput")?.focus();
+    }
+});
+</script>
 
 {% endblock %}
