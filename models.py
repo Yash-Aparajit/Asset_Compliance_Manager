@@ -427,7 +427,11 @@ class AssetScrap(db.Model):
 
     created_on = db.Column(db.DateTime, default=datetime.utcnow)
 
-    asset = db.relationship("Asset", backref="scrap_record")
+    asset = db.relationship(
+        "Asset",
+        backref=db.backref("scrap_record", uselist=False)
+    )
+
 
 # -------------------------
 # REMINDER ACKNOWLEDGEMENT
