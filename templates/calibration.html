@@ -303,7 +303,6 @@ function saveCalibration() {
         formData.append(`event_cost_${i}`, e.cost || "");
     });
 
-    // ✅ FIXED
     const btn = document.querySelector("#saveCalBtn");
     btn.disabled = true;
 
