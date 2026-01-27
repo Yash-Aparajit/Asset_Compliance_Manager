@@ -8,7 +8,7 @@
 ========================= -->
 <div class="card">
     <label><b>Select Asset *</b></label>
-    <select id="assetSelect" class="full-width searchable-select">
+    <select id="assetSelect" name="assetSelect" class="full-width searchable-select">
         <option value="">-- Select Asset --</option>
         {% for asset in assets %}
             <option value="{{ asset.id }}">
@@ -31,8 +31,10 @@ const assetIdInput = document.getElementById("asset_id");
 let events = [];
 let documents = [];
 
-assetSelect.addEventListener("change", () => {
-    const assetId = assetSelect.value;
+// ----------------------
+// ✅ Load calibration panel
+// ----------------------
+function loadCalibrationPanel(assetId) {
     if (!assetId) {
         panel.style.display = "none";
         panel.innerHTML = "";
@@ -42,16 +44,43 @@ assetSelect.addEventListener("change", () => {
     assetIdInput.value = assetId;
 
     fetch(`/calibration/asset/${assetId}`)
-    .then(res => {
-        if (!res.ok) throw new Error("Asset not allowed");
-        return res.json();
-    })
-    .then(data => renderPanel(data))
-    .catch(() => {
-        alert("This asset cannot be calibrated");
-        assetSelect.value = "";
-        panel.style.display = "none";
-    });
+        .then(res => {
+            if (!res.ok) throw new Error("Asset not allowed");
+            return res.json();
+        })
+        .then(data => renderPanel(data))
+        .catch(() => {
+            alert("This asset cannot be calibrated");
+
+            // ✅ Reset select properly for Select2 + normal select
+            if (window.jQuery) {
+                $("#assetSelect").val(null).trigger("change");
+            } else {
+                assetSelect.value = "";
+            }
+
+            panel.style.display = "none";
+            panel.innerHTML = "";
+        });
+}
+
+// ✅ Native change (works without Select2)
+assetSelect.addEventListener("change", () => {
+    loadCalibrationPanel(assetSelect.value);
+});
+
+// ✅ Select2 change support (this is the missing part)
+document.addEventListener("DOMContentLoaded", function () {
+    if (window.jQuery) {
+        $("#assetSelect").on("select2:select", function () {
+            loadCalibrationPanel(assetSelect.value);
+        });
+
+        $("#assetSelect").on("select2:clear", function () {
+            panel.style.display = "none";
+            panel.innerHTML = "";
+        });
+    }
 });
 
 function renderPanel(data) {
@@ -335,7 +364,13 @@ function resetForm() {
     panel.innerHTML = "";
     panel.style.display = "none";
 
-    assetSelect.value = "";
+    // ✅ reset select2 properly
+    if (window.jQuery) {
+        $("#assetSelect").val(null).trigger("change");
+    } else {
+        assetSelect.value = "";
+    }
+
     document.getElementById("calibrationForm").reset();
 }
 </script>
