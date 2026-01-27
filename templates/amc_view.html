@@ -59,19 +59,25 @@
             </tr>
 
             <tr><th>Equipment Age</th>
-                <td>{{ asset_age }} days</td>
+                <td>
+                    {% if asset_age is not none %}
+                        {{ asset_age }} days
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
             </tr>
 
             <tr><th>Contract Value</th>
-                <td>₹ {{ contract_value }}</td>
+                <td>₹ {{ "{:,.2f}".format(contract_value or 0) }}</td>
             </tr>
 
             <tr><th>Event Spend</th>
-                <td>₹ {{ event_total }}</td>
+                <td>₹ {{ "{:,.2f}".format(event_total or 0) }}</td>
             </tr>
 
             <tr><th>Total Spend</th>
-                <td><strong>₹ {{ total_spend }}</strong></td>
+                <td><strong>₹ {{ "{:,.2f}".format(total_spend or 0) }}</strong></td>
             </tr>
         </table>
     </div>
@@ -229,16 +235,6 @@ function confirmCancel() {
     if (confirm("Do you really want to mark this AMC as cancelled?")) {
         window.location.href = "{{ url_for('amc_cancel', amc_id=amc.id) }}";
     }
-}
-
-const docTypeSelect = document.getElementById("document_type");
-const otherGroup = document.getElementById("other_doc_group");
-
-if (docTypeSelect) {
-    docTypeSelect.addEventListener("change", () => {
-        otherGroup.style.display =
-            docTypeSelect.value === "Other" ? "block" : "none";
-    });
 }
 
 </script>
