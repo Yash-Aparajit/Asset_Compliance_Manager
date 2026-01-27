@@ -800,3 +800,42 @@ textarea:focus {
     margin-bottom: 20px;
 
 }
+
+/* =====================
+   PAGINATION
+===================== */
+.pagination-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+/* =====================
+   SELECT2 SEARCH DROPDOWNS
+===================== */
+.select2-container .select2-selection--single {
+    height: 44px !important;
+    border-radius: 12px !important;
+    border: 1px solid var(--border) !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 8px !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 44px !important;
+    font-size: 15px !important;
+    font-family: inherit !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 44px !important;
+}
+
+.select2-dropdown {
+    border-radius: 12px !important;
+    border: 1px solid var(--border) !important;
+    overflow: hidden;
+}
