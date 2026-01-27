@@ -13,13 +13,13 @@
 </div>
 
 <div class="card">
-<form method="POST" enctype="multipart/form-data">
+<form method="POST" enctype="multipart/form-data" onsubmit="return confirm('This action is irreversible. Proceed?')">
 
     <div class="form-grid">
 
         <div class="form-group">
             <label>Asset</label>
-            <select name="asset_id" required>
+            <select name="asset_id" class="searchable-select" required>
                 <option value="">Select Asset</option>
                 {% for asset in assets %}
                     <option value="{{ asset.id }}">
@@ -53,8 +53,7 @@
     </div>
 
     <div class="form-actions">
-        <button class="btn btn-primary"
-                onclick="return confirm('This action is irreversible. Proceed?')">
+        <button class="btn btn-primary">
             Scrap Asset
         </button>
         <a href="{{ url_for('asset_master') }}"
