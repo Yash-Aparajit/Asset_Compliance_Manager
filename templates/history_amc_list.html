@@ -3,7 +3,6 @@
 
 {% block content %}
 
-<!-- HEADER -->
 <div class="card header-card">
     <div class="header-left">
         <h1>AMC History</h1>
@@ -13,15 +12,13 @@
     </div>
 </div>
 
-<!-- FILTERS -->
 <div class="card filter-card">
     <form method="GET" class="filter-form">
-
         <div class="filter-row">
 
             <div class="form-group">
                 <label>Asset</label>
-                <select name="asset_id">
+                <select name="asset_id" class="searchable-select">
                     <option value="">All Assets</option>
                     {% for asset in assets %}
                         <option value="{{ asset.id }}"
@@ -61,7 +58,6 @@
     </form>
 </div>
 
-<!-- AMC HISTORY TABLE -->
 <div class="card table-card">
     <table class="asset-table">
         <thead>
@@ -118,6 +114,26 @@
 
         </tbody>
     </table>
+
+    {% if pagination %}
+    <div class="pagination-bar">
+        {% if pagination.has_prev %}
+            <a class="btn btn-secondary"
+               href="{{ url_for('history', page=pagination.prev_num, asset_id=selected_asset, status=selected_status) }}">
+               Prev
+            </a>
+        {% endif %}
+
+        <span class="muted-text">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+
+        {% if pagination.has_next %}
+            <a class="btn btn-secondary"
+               href="{{ url_for('history', page=pagination.next_num, asset_id=selected_asset, status=selected_status) }}">
+               Next
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 
 {% endblock %}
