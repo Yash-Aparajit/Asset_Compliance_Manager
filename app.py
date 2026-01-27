@@ -1,25 +1,25 @@
 import pandas as pd
 import os
 import zipfile
-import shutil
 
 from flask import (
     Flask, render_template, request,
-    redirect, url_for, session, flash, send_file
+    redirect, url_for, session, flash, send_file, jsonify
 )
 
-from models import ( 
-    db, User, Asset, AMC, AMCEvent, AMCDocument, 
-    Calibration, CalibrationEvent, CalibrationDocument, 
-    AssetScrap, ReminderAck )
+from models import (
+    db, User, Asset, AMC, AMCEvent, AMCDocument,
+    Calibration, CalibrationEvent, CalibrationDocument,
+    AssetScrap, ReminderAck
+)
 
 from datetime import datetime, date
-from flask import jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
 from openpyxl import Workbook
 from io import BytesIO
+
 
 # -------------------------------------------------
 # APP CONFIG
@@ -35,27 +35,30 @@ os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "app.db")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
-
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-db.init_app(app)
+# ✅ helps avoid "database is locked" in sqlite for short bursts
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "connect_args": {"timeout": 15}
+}
 
+db.init_app(app)
 
 # -------------------------------------------------
 # FILE STORAGE PATHS
 # -------------------------------------------------
-DATA_DIR = os.path.join(BASE_DIR, "data")
 AMC_DOC_DIR = os.path.join(DATA_DIR, "AMC")
-
 os.makedirs(AMC_DOC_DIR, exist_ok=True)
 
 CALIBRATION_DOC_DIR = os.path.join(DATA_DIR, "Calibration")
 os.makedirs(CALIBRATION_DOC_DIR, exist_ok=True)
 
+SCRAP_DOC_DIR = os.path.join(DATA_DIR, "Scrap")
+os.makedirs(SCRAP_DOC_DIR, exist_ok=True)
+
 # -------------------------------------------------
 # Utility Helpers
 # -------------------------------------------------
-
 def format_date_indian(date_obj):
     if not date_obj:
         return "-"
@@ -66,11 +69,11 @@ app.jinja_env.globals.update(
     format_date_indian=format_date_indian
 )
 
+
 def parse_indian_date(val):
     if val in (None, "", pd.NaT):
         return None
 
-    # Excel already parsed it
     if isinstance(val, (datetime, date)):
         return val.date() if isinstance(val, datetime) else val
 
@@ -83,6 +86,7 @@ def parse_indian_date(val):
             continue
 
     return None
+
 
 def get_amc_status(amc):
     today = date.today()
@@ -102,6 +106,7 @@ def get_amc_status(amc):
 
     return ("active", "Active")
 
+
 def is_acknowledged(source_type, source_id, rule):
     return (
         ReminderAck.query
@@ -114,10 +119,10 @@ def is_acknowledged(source_type, source_id, rule):
         is not None
     )
 
+
 # -------------------------------------------------
 # ASSET IMPORT SCHEMA
 # -------------------------------------------------
-
 ASSET_IMPORT_COLUMNS = {
     "Asset Code": "asset_code",
     "Asset Name": "asset_name",
@@ -180,25 +185,31 @@ def seed_users():
             )
             db.session.add(user)
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 with app.app_context():
     db.create_all()
     seed_users()
 
+    # ✅ WAL mode reduces sqlite write-lock pain (safe)
+    try:
+        db.session.execute(db.text("PRAGMA journal_mode=WAL;"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 # -------------------------------------------------
-# ROOT ROUTE 
+# ROOT ROUTE
 # -------------------------------------------------
 @app.route("/")
 def root():
-    """
-    Absolute landing route.
-    Forces reminder-first workflow.
-    """
     if "user_id" not in session:
         return redirect(url_for("login"))
-
     return redirect(url_for("reminders"))
 
 
@@ -221,10 +232,10 @@ def login():
         session["username"] = user.username
         session["role"] = user.role
 
-        # 🚨 HARD RULE: AFTER LOGIN → REMINDERS
         return redirect(url_for("reminders"))
 
     return render_template("login.html")
+
 
 @app.route("/logout")
 @login_required
@@ -232,8 +243,9 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+
 # -------------------------------------------------
-# ASSET MASTER
+# ASSET MASTER (PAGINATED)
 # -------------------------------------------------
 @app.route("/assets")
 @login_required
@@ -261,9 +273,20 @@ def asset_master():
     if status:
         query = query.filter(Asset.status == status)
 
-    assets = query.order_by(Asset.id.asc()).all()
+    page = request.args.get("page", 1, type=int)
+    per_page = 20
 
-    return render_template("asset_master.html", assets=assets)
+    pagination = query.order_by(Asset.id.asc()).paginate(
+        page=page,
+        per_page=per_page,
+        error_out=False
+    )
+
+    return render_template(
+        "asset_master.html",
+        assets=pagination.items,
+        pagination=pagination
+    )
 
 
 # -------------------------------------------------
@@ -274,42 +297,56 @@ def asset_master():
 def add_asset():
     if request.method == "POST":
         asset_code = request.form.get("asset_code", "").strip()
+        asset_name = request.form.get("asset_name", "").strip()
+
+        serial_no = request.form.get("serial_no")
+        serial_no = serial_no.strip() if serial_no else None
+
+        if not asset_code or not asset_name:
+            flash("Asset Code and Asset Name are required", "danger")
+            return render_template("asset_add.html")
 
         if Asset.query.filter_by(asset_code=asset_code).first():
             flash("Asset Code already exists", "danger")
             return render_template("asset_add.html")
 
-        # ---- DATE PARSING (ONLY PLACE) ----
+        # ✅ SERIAL UNIQUE CHECK
+        if serial_no:
+            if Asset.query.filter_by(serial_no=serial_no).first():
+                flash("Serial No already exists for another asset", "danger")
+                return render_template("asset_add.html")
+
         purchase_date_str = request.form.get("purchase_date")
         if purchase_date_str:
-            purchase_date = datetime.strptime(
-                purchase_date_str, "%Y-%m-%d"
-            ).date()
+            purchase_date = datetime.strptime(purchase_date_str, "%Y-%m-%d").date()
         else:
             purchase_date = None
-        # ----------------------------------
 
         asset = Asset(
             asset_code=asset_code,
-            asset_name=request.form.get("asset_name"),
-            serial_no=request.form.get("serial_no"),
+            asset_name=asset_name,
+            serial_no=serial_no,
             plant=request.form.get("plant"),
             department=request.form.get("department"),
             location=request.form.get("location"),
-            purchase_date=purchase_date   # ✅ DATE OBJECT ONLY
+            purchase_date=purchase_date
         )
 
-        db.session.add(asset)
-        db.session.commit()
-
-        flash("Asset added successfully", "success")
-        return redirect(url_for("asset_master"))
+        try:
+            db.session.add(asset)
+            db.session.commit()
+            flash("Asset added successfully", "success")
+            return redirect(url_for("asset_master"))
+        except Exception:
+            db.session.rollback()
+            flash("Asset add failed. No data was saved.", "danger")
+            return render_template("asset_add.html")
 
     return render_template("asset_add.html")
 
 
 # -------------------------------------------------
-# EDIT ASSET (NO STATUS CHANGE)
+# EDIT ASSET
 # -------------------------------------------------
 @app.route("/assets/edit/<int:asset_id>", methods=["GET", "POST"])
 @login_required
@@ -319,34 +356,56 @@ def edit_asset(asset_id):
     if asset.status == "Scrapped":
         flash("Scrapped assets cannot be edited", "danger")
         return redirect(url_for("asset_master"))
-    
+
     if request.method == "POST":
-        new_code = request.form.get("asset_code").strip()
+        new_code = request.form.get("asset_code", "").strip()
+        new_name = request.form.get("asset_name", "").strip()
+
+        serial_no = request.form.get("serial_no")
+        serial_no = serial_no.strip() if serial_no else None
+
+        if not new_code or not new_name:
+            flash("Asset Code and Asset Name are required", "danger")
+            return render_template("asset_edit.html", asset=asset)
 
         if new_code != asset.asset_code:
             if Asset.query.filter_by(asset_code=new_code).first():
                 flash("Asset Code already exists", "danger")
                 return render_template("asset_edit.html", asset=asset)
 
+        # ✅ SERIAL UNIQUE CHECK (EXCLUDE SAME ASSET)
+        if serial_no:
+            existing_serial = (
+                Asset.query
+                .filter(Asset.serial_no == serial_no, Asset.id != asset.id)
+                .first()
+            )
+            if existing_serial:
+                flash("Serial No already exists for another asset", "danger")
+                return render_template("asset_edit.html", asset=asset)
+
         asset.asset_code = new_code
-        asset.asset_name = request.form.get("asset_name")
-        asset.serial_no = request.form.get("serial_no")
+        asset.asset_name = new_name
+        asset.serial_no = serial_no
         asset.plant = request.form.get("plant")
         asset.department = request.form.get("department")
         asset.location = request.form.get("location")
-        purchase_date_str = request.form.get("purchase_date")
 
+        purchase_date_str = request.form.get("purchase_date")
         if purchase_date_str:
-            asset.purchase_date = datetime.strptime(
-                purchase_date_str, "%Y-%m-%d"
-            ).date()
+            asset.purchase_date = datetime.strptime(purchase_date_str, "%Y-%m-%d").date()
         else:
             asset.purchase_date = None
 
-        db.session.commit()
+        try:
+            db.session.commit()
+            flash("Asset updated successfully", "success")
+            return redirect(url_for("asset_master"))
 
-        flash("Asset updated successfully", "success")
-        return redirect(url_for("asset_master"))
+        except Exception:
+            db.session.rollback()
+            flash("Asset update failed. No changes were saved.", "danger")
+            return render_template("asset_edit.html", asset=asset)
 
     return render_template("asset_edit.html", asset=asset)
 
@@ -354,14 +413,12 @@ def edit_asset(asset_id):
 # -------------------------------------------------
 # Asset Import
 # -------------------------------------------------
-
 @app.route("/assets/import", methods=["GET", "POST"])
 @login_required
 def import_assets():
     if request.method == "POST":
         file = request.files.get("file")
 
-        # ---------- FILE CHECK ----------
         if not file or not file.filename.lower().endswith(".xlsx"):
             flash("Please upload a valid .xlsx Excel file", "danger")
             return redirect(url_for("import_assets"))
@@ -372,7 +429,6 @@ def import_assets():
             flash("Unable to read Excel file. File may be corrupted.", "danger")
             return redirect(url_for("import_assets"))
 
-        # ---------- EMPTY FILE CHECK ----------
         if df.empty:
             flash(
                 "Excel file contains no data rows. Please add asset data below the header.",
@@ -380,7 +436,6 @@ def import_assets():
             )
             return redirect(url_for("import_assets"))
 
-        # ---------- COLUMN VALIDATION ----------
         uploaded_columns = [str(c).strip() for c in df.columns]
         expected_columns = list(ASSET_IMPORT_COLUMNS.keys())
 
@@ -389,7 +444,6 @@ def import_assets():
             flash(f"Missing columns: {', '.join(missing)}", "danger")
             return redirect(url_for("import_assets"))
 
-        # Rename columns
         df = df.rename(columns=ASSET_IMPORT_COLUMNS)
 
         valid_rows = []
@@ -401,9 +455,13 @@ def import_assets():
             for a in Asset.query.with_entities(Asset.asset_code).all()
         }
 
-        # ---------- ROW VALIDATION ----------
+        existing_serials = {
+            a.serial_no
+            for a in Asset.query.with_entities(Asset.serial_no).all()
+            if a.serial_no
+        }
+
         for idx, row in df.iterrows():
-            # Skip fully empty rows
             if row.isna().all():
                 continue
 
@@ -414,6 +472,9 @@ def import_assets():
 
             asset_code = str(asset_code).strip() if pd.notna(asset_code) else ""
             asset_name = str(asset_name).strip() if pd.notna(asset_name) else ""
+
+            serial_no = row.get("serial_no")
+            serial_no = str(serial_no).strip() if pd.notna(serial_no) else ""
 
             if not asset_code:
                 errors.append("Missing Asset Code")
@@ -428,6 +489,11 @@ def import_assets():
 
             if asset_code:
                 seen_codes.add(asset_code)
+
+            # ✅ serial uniqueness check in import
+            if serial_no:
+                if serial_no in existing_serials:
+                    errors.append("Serial No already exists")
 
             purchase_date = None
             raw_date = row.get("purchase_date")
@@ -446,10 +512,7 @@ def import_assets():
                 "row_no": idx + 2,
                 "asset_code": asset_code,
                 "asset_name": asset_name,
-                "serial_no": (
-                    str(row.get("serial_no")).strip()
-                    if row.get("serial_no") not in (None, "", pd.NaT) else None
-                ),
+                "serial_no": serial_no if serial_no else None,
                 "plant": row.get("plant"),
                 "department": row.get("department"),
                 "location": row.get("location"),
@@ -462,7 +525,6 @@ def import_assets():
             else:
                 valid_rows.append(record)
 
-        # ---------- FINAL SAFETY GUARD ----------
         if not valid_rows and not invalid_rows:
             flash(
                 "All rows in the file are empty. Please enter asset details and try again.",
@@ -504,6 +566,12 @@ def confirm_import():
 
             if Asset.query.filter_by(asset_code=r["asset_code"]).first():
                 continue
+
+            # ✅ serial safety again
+            if r.get("serial_no"):
+                if Asset.query.filter_by(serial_no=r["serial_no"]).first():
+                    continue
+
             asset = Asset(
                 asset_code=r["asset_code"],
                 asset_name=r["asset_name"],
@@ -518,13 +586,13 @@ def confirm_import():
             )
             db.session.add(asset)
             imported_count += 1
+
         db.session.commit()
 
     except Exception as e:
         db.session.rollback()
         flash(f"Import failed: {str(e)}", "danger")
         return redirect(url_for("import_assets"))
-
 
     flash(f"{imported_count} assets imported successfully", "success")
     return redirect(url_for("asset_master"))
@@ -552,14 +620,10 @@ def download_asset_template():
 
     ws.append(headers)
 
-    # Style header row (basic, readable)
     for col in range(1, len(headers) + 1):
-        ws.cell(row=1, column=col).font = ws.cell(
-            row=1, column=col
-        ).font.copy(bold=True)
+        ws.cell(row=1, column=col).font = ws.cell(row=1, column=col).font.copy(bold=True)
         ws.column_dimensions[chr(64 + col)].width = 22
 
-    # Example row (optional but recommended)
     ws.append([
         "A001",
         "Hydraulic Press",
@@ -570,7 +634,6 @@ def download_asset_template():
         "17/01/2026"
     ])
 
-    # Prepare file in memory
     output = BytesIO()
     wb.save(output)
     output.seek(0)
@@ -584,18 +647,12 @@ def download_asset_template():
 
 
 # -------------------------------------------------
-# AMC CREATE + ACTIVE LIST
+# AMC CREATE + ACTIVE LIST (PAGINATED)
 # -------------------------------------------------
 @app.route("/amc", methods=["GET", "POST"])
 @login_required
 def amc_create():
     assets = Asset.query.order_by(Asset.id.asc()).all()
-
-    active_amcs = (
-        AMC.query
-        .filter_by(is_completed=False, is_cancelled=False)
-        .all()
-    )
 
     if request.method == "POST":
         asset_id = request.form.get("asset_id")
@@ -603,7 +660,6 @@ def amc_create():
         end_date = request.form.get("end_date")
         yearly_cost = request.form.get("yearly_cost")
 
-        # ---------- VALIDATIONS ----------
         asset = Asset.query.get(asset_id)
         if not asset:
             flash("Invalid asset selected", "danger")
@@ -634,7 +690,6 @@ def amc_create():
             flash("Start date must be before end date", "danger")
             return redirect(url_for("amc_create"))
 
-        # ---------- CREATE ----------
         amc = AMC(
             asset_id=asset.id,
             start_date=start_date,
@@ -642,11 +697,30 @@ def amc_create():
             yearly_cost=float(yearly_cost) if yearly_cost else None
         )
 
-        db.session.add(amc)
-        db.session.commit()
+        try:
+            db.session.add(amc)
+            db.session.commit()
 
-        flash("AMC created successfully", "success")
-        return redirect(url_for("amc_view", amc_id=amc.id))
+            flash("AMC created successfully", "success")
+            return redirect(url_for("amc_view", amc_id=amc.id))
+
+        except Exception:
+            db.session.rollback()
+            flash("AMC create failed. No data was saved.", "danger")
+            return redirect(url_for("amc_create"))
+
+    # ✅ pagination for active AMCs list
+    active_query = (
+        AMC.query
+        .filter_by(is_completed=False, is_cancelled=False)
+        .order_by(AMC.end_date.asc())
+    )
+
+    page = request.args.get("page", 1, type=int)
+    per_page = 15
+    active_pagination = active_query.paginate(page=page, per_page=per_page, error_out=False)
+
+    active_amcs = active_pagination.items
 
     amc_status_map = {}
     today = date.today()
@@ -661,12 +735,12 @@ def amc_create():
             "days_left": days_left
         }
 
-
     return render_template(
         "amc_create.html",
         assets=assets,
         active_amcs=active_amcs,
-        amc_status_map=amc_status_map
+        amc_status_map=amc_status_map,
+        pagination=active_pagination
     )
 
 
@@ -688,12 +762,7 @@ def amc_view(amc_id):
     if asset.purchase_date:
         asset_age = (today - asset.purchase_date).days
 
-    # ---- AMC TOTAL SPEND CALCULATION ----
-    event_total = sum(
-        e.cost or 0
-        for e in amc.events
-    )
-
+    event_total = sum(e.cost or 0 for e in amc.events)
     contract_value = amc.yearly_cost or 0
     total_spend = contract_value + event_total
 
@@ -713,7 +782,7 @@ def amc_view(amc_id):
 
 
 # -------------------------------------------------
-# AMC EVENT CREATE
+# AMC EVENT CREATE (✅ VALIDATED)
 # -------------------------------------------------
 @app.route("/amc/<int:amc_id>/event", methods=["POST"])
 @login_required
@@ -734,6 +803,16 @@ def amc_add_event(amc_id):
         flash("Invalid event date", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
 
+    # ✅ RULE 1: cannot be future
+    if event_date > date.today():
+        flash("Event date cannot be in the future", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    # ✅ RULE 2: must fall between AMC period
+    if event_date < amc.start_date or event_date > amc.end_date:
+        flash("Event date must be between AMC start and end date", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
     event = AMCEvent(
         amc_id=amc.id,
         event_date=event_date,
@@ -741,11 +820,17 @@ def amc_add_event(amc_id):
         cost=float(cost) if cost else None
     )
 
-    db.session.add(event)
-    db.session.commit()
+    try:
+        db.session.add(event)
+        db.session.commit()
 
-    flash("AMC event added successfully", "success")
-    return redirect(url_for("amc_view", amc_id=amc.id))
+        flash("AMC event added successfully", "success")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    except Exception:
+        db.session.rollback()
+        flash("AMC event save failed. No data was saved.", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
 
 
 # -------------------------------------------------
@@ -769,17 +854,14 @@ def amc_upload_document(amc_id):
             flash("Please specify document type", "danger")
             return redirect(url_for("amc_view", amc_id=amc.id))
 
-
     if not file or not file.filename.lower().endswith(".pdf"):
         flash("Only PDF files are allowed", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
 
     asset_code = amc.asset.asset_code
     month_year = datetime.today().strftime("%m-%Y")
-
     safe_doc_type = doc_type.replace(" ", "_")
 
-    # ---- sequence per AMC + document type ----
     existing_count = AMCDocument.query.filter_by(
         amc_id=amc.id,
         document_type=doc_type
@@ -787,26 +869,36 @@ def amc_upload_document(amc_id):
 
     seq = existing_count + 1
 
-    stored_filename = (
-        f"{month_year}_AMC_{asset_code}_{safe_doc_type}_{seq}.pdf"
-    )
-
+    stored_filename = f"{month_year}_AMC_{asset_code}_{safe_doc_type}_{seq}.pdf"
     file_path = os.path.join(AMC_DOC_DIR, stored_filename)
 
-    file.save(file_path)
+    try:
+        file.save(file_path)
 
-    doc = AMCDocument(
-        amc_id=amc.id,
-        document_type=doc_type,
-        stored_filename=stored_filename,
-        original_filename=file.filename
-    )
+        doc = AMCDocument(
+            amc_id=amc.id,
+            document_type=doc_type,
+            stored_filename=stored_filename,
+            original_filename=file.filename
+        )
 
-    db.session.add(doc)
-    db.session.commit()
+        db.session.add(doc)
+        db.session.commit()
 
-    flash("Document uploaded successfully", "success")
-    return redirect(url_for("amc_view", amc_id=amc.id))
+        flash("Document uploaded successfully", "success")
+        return redirect(url_for("amc_view", amc_id=amc.id))
+
+    except Exception:
+        db.session.rollback()
+
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
+        flash("Document upload failed. No data was saved.", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
 
 
 # -------------------------------------------------
@@ -816,7 +908,6 @@ def amc_upload_document(amc_id):
 @login_required
 def amc_download_document(doc_id):
     doc = AMCDocument.query.get_or_404(doc_id)
-
     file_path = os.path.join(AMC_DOC_DIR, doc.stored_filename)
 
     if not os.path.exists(file_path):
@@ -845,10 +936,15 @@ def amc_complete(amc_id):
     amc.is_completed = True
     amc.completed_on = date.today()
 
-    db.session.commit()
+    try:
+        db.session.commit()
+        flash("AMC marked as completed", "success")
+        return redirect(url_for("amc_create"))
 
-    flash("AMC marked as completed", "successfully !!")
-    return redirect(url_for("amc_create"))
+    except Exception:
+        db.session.rollback()
+        flash("AMC completion failed. No changes were saved.", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
 
 
 # -------------------------------------------------
@@ -866,26 +962,32 @@ def amc_cancel(amc_id):
     amc.is_cancelled = True
     amc.completed_on = date.today()
 
-    db.session.commit()
+    try:
+        db.session.commit()
+        flash("AMC marked as cancelled", "success")
+        return redirect(url_for("amc_create"))
 
-    flash("AMC marked as cancelled", "successfully !!")
-    return redirect(url_for("amc_create"))
+    except Exception:
+        db.session.rollback()
+        flash("AMC cancel failed. No changes were saved.", "danger")
+        return redirect(url_for("amc_view", amc_id=amc.id))
 
 
 # -------------------------------------------------
 # CALIBRATION MAIN PAGE
 # -------------------------------------------------
-
 @app.route("/calibration")
 @login_required
 def calibration():
     assets = Asset.query.filter_by(status="Active").order_by(Asset.id.asc()).all()
     return render_template("calibration.html", assets=assets)
 
+
 @app.route("/calibration/asset/<int:asset_id>")
 @login_required
 def calibration_asset_data(asset_id):
     asset = Asset.query.get_or_404(asset_id)
+
     if asset.status == "Scrapped":
         return jsonify({
             "success": False,
@@ -933,6 +1035,7 @@ def calibration_asset_data(asset_id):
         "days_left": days_left,
     }
 
+
 @app.route("/calibration/save", methods=["POST"])
 @login_required
 def save_calibration():
@@ -953,12 +1056,17 @@ def save_calibration():
         request.form["next_due_date"], "%Y-%m-%d"
     ).date()
 
-    if next_due <= done_date or next_due <= date.today():
+    if next_due <= done_date:
         return jsonify({
             "success": False,
-            "message": "Next calibration due date must be after calibration date and today"
+            "message": "Next calibration due date must be after calibration done date"
         }), 400
 
+    if done_date > date.today():
+        return jsonify({
+            "success": False,
+            "message": "Calibration done date cannot be in the future"
+        }), 400
 
     try:
         cal = Calibration(
@@ -970,7 +1078,7 @@ def save_calibration():
         )
 
         db.session.add(cal)
-        db.session.flush()   
+        db.session.flush()
 
         # --------------------
         # DOCUMENTS
@@ -1002,54 +1110,86 @@ def save_calibration():
             doc_index += 1
 
         # --------------------
-        # EVENTS
+        # EVENTS (✅ VALIDATED)
         # --------------------
         idx = 0
         while f"event_date_{idx}" in request.form:
+            ev_date_str = request.form.get(f"event_date_{idx}")
+            ev_date = datetime.strptime(ev_date_str, "%Y-%m-%d").date()
+
+            # ✅ cannot be future
+            if ev_date > date.today():
+                db.session.rollback()
+                return jsonify({
+                    "success": False,
+                    "message": "Calibration event date cannot be in the future"
+                }), 400
+
+            # ✅ must be between done and next due
+            if ev_date < done_date or ev_date > next_due:
+                db.session.rollback()
+                return jsonify({
+                    "success": False,
+                    "message": "Calibration event date must be between Done Date and Next Due Date"
+                }), 400
+
             event = CalibrationEvent(
                 calibration_id=cal.id,
-                event_date=datetime.strptime(
-                    request.form[f"event_date_{idx}"], "%Y-%m-%d"
-                ).date(),
+                event_date=ev_date,
                 remarks=request.form.get(f"event_remarks_{idx}"),
                 cost=request.form.get(f"event_cost_{idx}") or None
             )
             db.session.add(event)
             idx += 1
 
-        # --------------------
-        # FINAL COMMIT
-        # --------------------
         db.session.commit()
-    
+
         return jsonify({
             "success": True,
             "message": "Calibration recorded successfully"
         })
 
-    except Exception as e:
+    except Exception:
         db.session.rollback()
         return jsonify({
             "success": False,
             "message": "Calibration save failed. No data was recorded."
         }), 500
 
- 
+
 # -------------------------------------------------
-# HISTORY ROUTES (AMC)
+# CALIBRATION DOCUMENT DOWNLOAD
 # -------------------------------------------------
-    
+@app.route("/calibration/document/<int:doc_id>/download")
+@login_required
+def calibration_download_document(doc_id):
+    doc = CalibrationDocument.query.get_or_404(doc_id)
+    file_path = os.path.join(CALIBRATION_DOC_DIR, doc.stored_filename)
+
+    if not os.path.exists(file_path):
+        flash("File not found on server", "danger")
+        return redirect(url_for("history_calibration_view", calibration_id=doc.calibration_id))
+
+    return send_file(
+        file_path,
+        as_attachment=False,
+        mimetype="application/pdf"
+    )
+
+
+# -------------------------------------------------
+# HISTORY ROUTES (AMC) - PAGINATED
+# -------------------------------------------------
 @app.route("/history")
 @login_required
 def history():
     assets = Asset.query.order_by(Asset.asset_code.asc()).all()
 
     asset_id = request.args.get("asset_id")
-    status = request.args.get("status")  # completed / cancelled / all
+    status = request.args.get("status")
 
     query = AMC.query.join(Asset)
 
-    # ---- HARD RULE: ONLY CLOSED AMC ----
     query = query.filter(
         (AMC.is_completed == True) | (AMC.is_cancelled == True)
     )
@@ -1063,26 +1203,30 @@ def history():
     if status == "cancelled":
         query = query.filter(AMC.is_cancelled == True)
 
-    # LEDGER ORDER — latest closed first
-    amcs = query.order_by(
+    query = query.order_by(
         AMC.completed_on.desc().nullslast(),
         AMC.created_on.desc()
-    ).all()
+    )
+
+    page = request.args.get("page", 1, type=int)
+    per_page = 15
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return render_template(
         "history_amc_list.html",
         assets=assets,
-        amcs=amcs,
+        amcs=pagination.items,
+        pagination=pagination,
         selected_asset=asset_id,
         selected_status=status
     )
+
 
 @app.route("/history/amc/<int:amc_id>")
 @login_required
 def history_amc_view(amc_id):
     amc = AMC.query.get_or_404(amc_id)
 
-    # ---- SAFETY GUARD ----
     if not amc.is_completed and not amc.is_cancelled:
         flash("Active AMC cannot be viewed in history", "danger")
         return redirect(url_for("history"))
@@ -1107,6 +1251,7 @@ def history_amc_view(amc_id):
         total_spend=total_spend
     )
 
+
 @app.route("/history/amc/<int:amc_id>/export")
 @login_required
 def export_amc_history(amc_id):
@@ -1116,15 +1261,10 @@ def export_amc_history(amc_id):
         flash("Active AMC cannot be exported", "danger")
         return redirect(url_for("history"))
 
-    import zipfile
-    from io import BytesIO
-    import pandas as pd
-
     buffer = BytesIO()
 
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
 
-        # -------- SUMMARY EXCEL --------
         summary = {
             "Asset Code": amc.asset.asset_code,
             "Asset Name": amc.asset.asset_name,
@@ -1139,7 +1279,6 @@ def export_amc_history(amc_id):
         df_summary.to_excel(summary_xlsx, index=False)
         z.writestr("summary/amc_summary.xlsx", summary_xlsx.getvalue())
 
-        # -------- EVENTS EXCEL --------
         events = [{
             "Date": format_date_indian(e.event_date),
             "Remarks": e.remarks,
@@ -1151,14 +1290,10 @@ def export_amc_history(amc_id):
         df_events.to_excel(events_xlsx, index=False)
         z.writestr("events/amc_events.xlsx", events_xlsx.getvalue())
 
-        # -------- DOCUMENTS --------
         for d in amc.documents:
             path = os.path.join(AMC_DOC_DIR, d.stored_filename)
             if os.path.exists(path):
-                z.write(
-                    path,
-                    arcname=f"documents/{d.stored_filename}"
-                )
+                z.write(path, arcname=f"documents/{d.stored_filename}")
 
     buffer.seek(0)
 
@@ -1173,9 +1308,8 @@ def export_amc_history(amc_id):
 
 
 # -------------------------------------------------
-# HISTORY ROUTES (Calibration)
+# HISTORY ROUTES (Calibration) - PAGINATED
 # -------------------------------------------------
-
 @app.route("/history/calibration")
 @login_required
 def history_calibration_list():
@@ -1187,17 +1321,30 @@ def history_calibration_list():
     if asset_id:
         query = query.filter(Calibration.asset_id == asset_id)
 
-    # LEDGER ORDER — latest entry first
-    calibrations = query.order_by(
+    query = query.order_by(
         Calibration.created_on.desc(),
         Calibration.calibration_done_date.desc()
-    ).all()
+    )
 
+    page = request.args.get("page", 1, type=int)
+    per_page = 15
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    calibrations = pagination.items
     today = date.today()
 
-    # ---- FIND LATEST CALIBRATION PER ASSET ----
+    # latest per asset among current page list is not enough.
+    # ✅ get true latest per asset from DB
     latest_per_asset = {}
-    for c in calibrations:
+    all_latest = (
+        Calibration.query
+        .order_by(
+            Calibration.calibration_done_date.desc(),
+            Calibration.created_on.desc()
+        )
+        .all()
+    )
+    for c in all_latest:
         if c.asset_id not in latest_per_asset:
             latest_per_asset[c.asset_id] = c.id
 
@@ -1208,7 +1355,7 @@ def history_calibration_list():
         days_left = (c.next_due_date - today).days
         days_left_map[c.id] = days_left
 
-        if c.id != latest_per_asset[c.asset_id]:
+        if latest_per_asset.get(c.asset_id) != c.id:
             status_map[c.id] = "superseded"
         else:
             if days_left < 0:
@@ -1220,10 +1367,12 @@ def history_calibration_list():
         "history_calibration_list.html",
         assets=assets,
         calibrations=calibrations,
+        pagination=pagination,
         days_left_map=days_left_map,
         status_map=status_map,
         selected_asset=asset_id
     )
+
 
 @app.route("/history/calibration/<int:calibration_id>")
 @login_required
@@ -1231,15 +1380,31 @@ def history_calibration_view(calibration_id):
     calibration = Calibration.query.get_or_404(calibration_id)
     asset = calibration.asset
 
-    days_left = (calibration.next_due_date - date.today()).days
+    today = date.today()
+    days_left = (calibration.next_due_date - today).days
 
-    if days_left < 0:
-        status = "Overdue"
+    asset_age = None
+    if asset.purchase_date:
+        asset_age = (today - asset.purchase_date).days
+
+    latest = (
+        Calibration.query
+        .filter_by(asset_id=asset.id)
+        .order_by(
+            Calibration.calibration_done_date.desc(),
+            Calibration.created_on.desc()
+        )
+        .first()
+    )
+
+    if latest and latest.id != calibration.id:
+        status = "superseded"
+    elif days_left < 0:
+        status = "overdue"
     elif days_left == 0:
-        status = "Due Today"
+        status = "due_today"
     else:
-        status = "Valid"
-
+        status = "valid"
 
     event_total = sum(e.cost or 0 for e in calibration.events)
     calibration_cost = calibration.cost or 0
@@ -1249,6 +1414,7 @@ def history_calibration_view(calibration_id):
         "history_calibration_view.html",
         calibration=calibration,
         asset=asset,
+        asset_age=asset_age,
         days_left=days_left,
         status=status,
         event_total=event_total,
@@ -1256,28 +1422,21 @@ def history_calibration_view(calibration_id):
         total_spend=total_spend
     )
 
+
 @app.route("/history/calibration/<int:calibration_id>/export")
 @login_required
 def export_calibration_history(calibration_id):
     calibration = Calibration.query.get_or_404(calibration_id)
 
-    import zipfile
-    from io import BytesIO
-
     buffer = BytesIO()
 
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
 
-        # -------- SUMMARY --------
         summary = {
             "Asset Code": calibration.asset.asset_code,
             "Asset Name": calibration.asset.asset_name,
-            "Calibration Date": format_date_indian(
-                calibration.calibration_done_date
-            ),
-            "Next Due Date": format_date_indian(
-                calibration.next_due_date
-            ),
+            "Calibration Date": format_date_indian(calibration.calibration_done_date),
+            "Next Due Date": format_date_indian(calibration.next_due_date),
             "Cost": calibration.cost or 0,
             "Remarks": calibration.remarks or "-"
         }
@@ -1287,7 +1446,6 @@ def export_calibration_history(calibration_id):
         df_summary.to_excel(summary_xlsx, index=False)
         z.writestr("summary/calibration_summary.xlsx", summary_xlsx.getvalue())
 
-        # -------- EVENTS --------
         events = [{
             "Date": format_date_indian(e.event_date),
             "Remarks": e.remarks,
@@ -1299,14 +1457,10 @@ def export_calibration_history(calibration_id):
         df_events.to_excel(events_xlsx, index=False)
         z.writestr("events/calibration_events.xlsx", events_xlsx.getvalue())
 
-        # -------- DOCUMENTS --------
         for d in calibration.documents:
             path = os.path.join(CALIBRATION_DOC_DIR, d.stored_filename)
             if os.path.exists(path):
-                z.write(
-                    path,
-                    arcname=f"documents/{d.stored_filename}"
-                )
+                z.write(path, arcname=f"documents/{d.stored_filename}")
 
     buffer.seek(0)
 
@@ -1319,20 +1473,14 @@ def export_calibration_history(calibration_id):
         mimetype="application/zip"
     )
 
+
 # -------------------------------------------------
 # SCRAP ASSET
 # -------------------------------------------------
-
-SCRAP_DOC_DIR = os.path.join(DATA_DIR, "Scrap")
-os.makedirs(SCRAP_DOC_DIR, exist_ok=True)
-
-
 @app.route("/scrap", methods=["GET", "POST"])
 @login_required
 @role_required(["developer", "purchase"])
 def scrap_asset():
-
-    # Only ACTIVE assets can be scrapped
     assets = (
         Asset.query
         .filter_by(status="Active")
@@ -1348,7 +1496,6 @@ def scrap_asset():
 
         asset = Asset.query.get_or_404(asset_id)
 
-        # ---- HARD SAFETY ----
         if asset.status == "Scrapped":
             flash("Asset is already scrapped", "danger")
             return redirect(url_for("scrap_asset"))
@@ -1363,15 +1510,11 @@ def scrap_asset():
 
         scrap_date = datetime.strptime(scrap_date, "%Y-%m-%d").date()
 
-        # ---- STORE DOCUMENT ----
-        filename = (
-            f"{scrap_date}_SCRAP_{asset.asset_code}.pdf"
-        )
+        filename = f"{scrap_date}_SCRAP_{asset.asset_code}.pdf"
         file_path = os.path.join(SCRAP_DOC_DIR, filename)
         file.save(file_path)
 
         try:
-            # ---- CREATE SCRAP RECORD ----
             scrap = AssetScrap(
                 asset_id=asset.id,
                 scrap_date=scrap_date,
@@ -1381,10 +1524,8 @@ def scrap_asset():
             )
             db.session.add(scrap)
 
-            # ---- UPDATE ASSET ----
             asset.status = "Scrapped"
 
-            # ---- AUTO CANCEL ACTIVE AMC ----
             AMC.query.filter(
                 AMC.asset_id == asset.id,
                 AMC.is_completed == False,
@@ -1404,10 +1545,43 @@ def scrap_asset():
             flash("Scrap failed. No changes were saved.", "danger")
             return redirect(url_for("scrap_asset"))
 
-    return render_template(
-        "scrap_asset.html",
-        assets=assets
+    return render_template("scrap_asset.html", assets=assets)
+
+
+# -------------------------------------------------
+# SCRAP HISTORY (✅ NEW)
+# -------------------------------------------------
+@app.route("/history/scrap")
+@login_required
+def history_scrap_list():
+    query = (
+        AssetScrap.query
+        .join(Asset)
+        .order_by(AssetScrap.scrap_date.desc())
     )
+
+    page = request.args.get("page", 1, type=int)
+    per_page = 15
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return render_template(
+        "history_scrap_list.html",
+        scraps=pagination.items,
+        pagination=pagination
+    )
+
+
+@app.route("/scrap/document/<int:scrap_id>/download")
+@login_required
+def scrap_download(scrap_id):
+    scrap = AssetScrap.query.get_or_404(scrap_id)
+    path = os.path.join(SCRAP_DOC_DIR, scrap.scrap_note_filename)
+
+    if not os.path.exists(path):
+        flash("Scrap note file not found", "danger")
+        return redirect(url_for("history_scrap_list"))
+
+    return send_file(path, as_attachment=False, mimetype="application/pdf")
 
 
 # -------------------------------
@@ -1416,17 +1590,10 @@ def scrap_asset():
 @app.route("/reminders")
 @login_required
 def reminders():
-    """
-    Landing page.
-    Reminders are evaluated fresh on every visit.
-    """
-
     today = date.today()
     reminders = []
 
-    # --------------------------------
-    # AMC REMINDERS
-    # --------------------------------
+    # AMC reminders
     active_amcs = (
         AMC.query
         .join(Asset)
@@ -1444,15 +1611,12 @@ def reminders():
         if days_left < 0:
             rule = "overdue"
             severity = "overdue"
-
         elif 0 <= days_left <= 7:
             rule = "due_soon"
             severity = "due_soon"
-
         elif 8 <= days_left <= 15:
             rule = "upcoming"
             severity = "upcoming"
-
         else:
             continue
 
@@ -1469,9 +1633,7 @@ def reminders():
                 "source_id": amc.id
             })
 
-    # --------------------------------
-    # CALIBRATION REMINDERS (LATEST ONLY)
-    # --------------------------------
+    # Calibration reminders (latest only)
     active_assets = Asset.query.filter_by(status="Active").all()
 
     for asset in active_assets:
@@ -1493,15 +1655,12 @@ def reminders():
         if days_left < 0:
             rule = "overdue"
             severity = "overdue"
-
         elif 0 <= days_left <= 7:
             rule = "due_soon"
             severity = "due_soon"
-
         elif 8 <= days_left <= 15:
             rule = "upcoming"
             severity = "upcoming"
-
         else:
             continue
 
@@ -1518,9 +1677,6 @@ def reminders():
                 "source_id": latest_cal.id
             })
 
-    # --------------------------------
-    # SORT FOR DISPLAY
-    # --------------------------------
     severity_order = {
         "overdue": 0,
         "due_soon": 1,
@@ -1534,15 +1690,12 @@ def reminders():
         )
     )
 
-    return render_template(
-        "reminders.html",
-        reminders=reminders
-    )
+    return render_template("reminders.html", reminders=reminders)
+
 
 @app.route("/reminders/acknowledge", methods=["POST"])
 @login_required
 def acknowledge_reminder():
-
     source_type = request.json.get("source_type")
     source_id = request.json.get("source_id")
     rule = request.json.get("rule")
@@ -1553,7 +1706,6 @@ def acknowledge_reminder():
             "message": "Invalid reminder data"
         }), 400
 
-    # prevent duplicate ACK
     existing = ReminderAck.query.filter_by(
         source_type=source_type,
         source_id=source_id,
@@ -1579,22 +1731,25 @@ def acknowledge_reminder():
         acknowledged_by=session.get("user_id")
     )
 
-    db.session.add(ack)
-    db.session.commit()
+    try:
+        db.session.add(ack)
+        db.session.commit()
+        return jsonify({"success": True})
 
-    return jsonify({"success": True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Acknowledgement failed. Please refresh and try again."
+        }), 500
 
 
 # -------------------------------------------------
-# BACKUP 
+# BACKUP
 # -------------------------------------------------
-
 @app.route("/backup")
 @login_required
 def backup():
-
-    DATA_DIR = os.path.join(BASE_DIR, "data")
-
     if not os.path.exists(DATA_DIR):
         flash("Data directory not found. Backup failed.", "danger")
         return redirect(url_for("reminders"))
@@ -1608,8 +1763,6 @@ def backup():
         for root, dirs, files in os.walk(DATA_DIR):
             for file in files:
                 full_path = os.path.join(root, file)
-
-                # Keep folder structure inside zip
                 arcname = os.path.relpath(full_path, BASE_DIR)
                 zipf.write(full_path, arcname)
 
@@ -1626,7 +1779,6 @@ def backup():
 # -------------------------------------------------
 # CHANGE PASSWORD
 # -------------------------------------------------
-
 @app.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
@@ -1651,11 +1803,17 @@ def change_password():
             flash("Current password is incorrect.", "danger")
             return redirect(url_for("change_password"))
 
-        user.password_hash = generate_password_hash(new)
-        db.session.commit()
+        try:
+            user.password_hash = generate_password_hash(new)
+            db.session.commit()
 
-        flash("Password changed successfully.", "success")
-        return redirect(url_for("index"))
+            flash("Password changed successfully.", "success")
+            return redirect(url_for("reminders"))
+
+        except Exception:
+            db.session.rollback()
+            flash("Password change failed. Try again.", "danger")
+            return redirect(url_for("change_password"))
 
     return render_template("change_password.html")
 
@@ -1663,7 +1821,6 @@ def change_password():
 # -------------------------------------------------
 # PASSWORD RESET
 # -------------------------------------------------
-
 @app.route("/reset-password", methods=["GET", "POST"])
 @login_required
 def reset_password():
@@ -1671,7 +1828,7 @@ def reset_password():
 
     if role != "developer":
         flash("Access denied.", "danger")
-        return redirect(url_for("index"))
+        return redirect(url_for("reminders"))
 
     users = User.query.all()
 
@@ -1689,11 +1846,17 @@ def reset_password():
             flash("User not found.", "danger")
             return redirect(url_for("reset_password"))
 
-        user.password_hash = generate_password_hash(new_password)
-        db.session.commit()
+        try:
+            user.password_hash = generate_password_hash(new_password)
+            db.session.commit()
 
-        flash(f"Password reset for {username}.", "success")
-        return redirect(url_for("reset_password"))
+            flash(f"Password reset for {username}.", "success")
+            return redirect(url_for("reset_password"))
+
+        except Exception:
+            db.session.rollback()
+            flash("Password reset failed. No changes were saved.", "danger")
+            return redirect(url_for("reset_password"))
 
     return render_template("reset_password.html", users=users)
 
