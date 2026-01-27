@@ -8,17 +8,15 @@
     </div>
 </div>
 
-<div class="card form-card">
-
+<div class="card form-card amc-create-card">
     <h3>Create AMC</h3>
 
     <form method="POST" class="asset-form">
-
         <div class="form-grid">
 
             <div class="form-group">
                 <label>Asset</label>
-                <select name="asset_id" required>
+                <select name="asset_id" class="searchable-select" required>
                     <option value="">Select Asset</option>
                     {% for asset in assets %}
                         <option value="{{ asset.id }}">
@@ -50,12 +48,13 @@
                 Create AMC
             </button>
         </div>
-
     </form>
 </div>
 
-<div class="card">
+<!-- ✅ Proper gap (REAL) -->
+<div style="height: 26px;"></div>
 
+<div class="card">
     <h3>Active AMCs</h3>
 
     <table class="asset-table">
@@ -70,6 +69,7 @@
                 <th>Action</th>
             </tr>
         </thead>
+
         <tbody>
             {% for amc in active_amcs %}
                 <tr>
@@ -80,7 +80,6 @@
                     </td>
 
                     <td>{{ format_date_indian(amc.start_date) }}</td>
-
                     <td>{{ format_date_indian(amc.end_date) }}</td>
 
                     <td>
@@ -92,28 +91,44 @@
                     <td>
                         {% set st = amc_status_map.get(amc.id) %}
                         {% if st %}
-                        <span class="status-pill {{ st.key }}">
-                            {{ st.label }}
-                        </span>
+                            <span class="status-pill {{ st.key }}">
+                                {{ st.label }}
+                            </span>
                         {% endif %}
                     </td>
 
                     <td>
                         <a href="{{ url_for('amc_view', amc_id=amc.id) }}"
-                        class="btn btn-secondary">
+                           class="btn btn-secondary">
                             View
                         </a>
                     </td>
                 </tr>
             {% else %}
                 <tr>
-                    <td colspan="5" class="muted-text">
+                    <td colspan="7" class="muted-text">
                         No active AMC found
                     </td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    {% if pagination %}
+    <div class="pagination-bar">
+        {% if pagination.has_prev %}
+            <a class="btn btn-secondary" href="{{ url_for('amc_create', page=pagination.prev_num) }}">Prev</a>
+        {% endif %}
+
+        <span class="muted-text">
+            Page {{ pagination.page }} of {{ pagination.pages }}
+        </span>
+
+        {% if pagination.has_next %}
+            <a class="btn btn-secondary" href="{{ url_for('amc_create', page=pagination.next_num) }}">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 
 {% endblock %}
