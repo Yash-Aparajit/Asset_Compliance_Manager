@@ -3,7 +3,6 @@
 
 {% block content %}
 
-<!-- HEADER -->
 <div class="card header-card">
     <div class="header-left">
         <h1>
@@ -28,19 +27,20 @@
     </div>
 </div>
 
-<!-- STATUS -->
 <div class="card">
-    {% if days_left < 0 %}
+    {% if status == "superseded" %}
+        <span class="status-pill status-pill-lg cancelled">Superseded</span>
+    {% elif status == "overdue" %}
         <span class="status-pill status-pill-lg overdue">Overdue</span>
+    {% elif status == "due_today" %}
+        <span class="status-pill status-pill-lg warning">Due Today</span>
     {% else %}
         <span class="status-pill status-pill-lg active">Valid</span>
     {% endif %}
 </div>
 
-<!-- ASSET + CALIBRATION SUMMARY -->
 <div class="two-column-grid">
 
-    <!-- ASSET DETAILS -->
     <div class="card">
         <h3>Asset Details</h3>
         <table class="asset-table">
@@ -54,10 +54,13 @@
                 <th>Purchase Date</th>
                 <td>{{ format_date_indian(asset.purchase_date) }}</td>
             </tr>
+            <tr>
+                <th>Equipment Age</th>
+                <td>{{ asset_age or "-" }} days</td>
+            </tr>
         </table>
     </div>
 
-    <!-- CALIBRATION SUMMARY -->
     <div class="card">
         <h3>Calibration Summary</h3>
         <table class="asset-table">
@@ -96,7 +99,6 @@
 
 </div>
 
-<!-- EVENT HISTORY -->
 <div class="card">
     <h3>Event History</h3>
 
@@ -124,7 +126,6 @@
     </table>
 </div>
 
-<!-- DOCUMENT HISTORY -->
 <div class="card">
     <h3>Document History</h3>
 
@@ -142,7 +143,7 @@
                     <td>{{ d.stored_filename }}</td>
                     <td>{{ d.document_type }}</td>
                     <td>
-                        <a href="{{ url_for('amc_download_document', doc_id=d.id) }}"
+                        <a href="{{ url_for('calibration_download_document', doc_id=d.id) }}"
                            target="_blank"
                            class="btn btn-secondary">
                             View
