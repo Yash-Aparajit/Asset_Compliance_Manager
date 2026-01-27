@@ -37,7 +37,6 @@ DB_PATH = os.path.join(DATA_DIR, "app.db")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# ✅ helps avoid "database is locked" in sqlite for short bursts
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "connect_args": {"timeout": 15}
 }
@@ -195,7 +194,7 @@ with app.app_context():
     db.create_all()
     seed_users()
 
-    # ✅ WAL mode reduces sqlite write-lock pain (safe)
+    # WAL mode reduces sqlite write-lock pain (safe)
     try:
         db.session.execute(db.text("PRAGMA journal_mode=WAL;"))
         db.session.commit()
@@ -245,7 +244,7 @@ def logout():
 
 
 # -------------------------------------------------
-# ASSET MASTER (PAGINATED)
+# ASSET MASTER 
 # -------------------------------------------------
 @app.route("/assets")
 @login_required
@@ -310,7 +309,6 @@ def add_asset():
             flash("Asset Code already exists", "danger")
             return render_template("asset_add.html")
 
-        # ✅ SERIAL UNIQUE CHECK
         if serial_no:
             if Asset.query.filter_by(serial_no=serial_no).first():
                 flash("Serial No already exists for another asset", "danger")
@@ -373,7 +371,6 @@ def edit_asset(asset_id):
                 flash("Asset Code already exists", "danger")
                 return render_template("asset_edit.html", asset=asset)
 
-        # ✅ SERIAL UNIQUE CHECK (EXCLUDE SAME ASSET)
         if serial_no:
             existing_serial = (
                 Asset.query
@@ -490,7 +487,6 @@ def import_assets():
             if asset_code:
                 seen_codes.add(asset_code)
 
-            # ✅ serial uniqueness check in import
             if serial_no:
                 if serial_no in existing_serials:
                     errors.append("Serial No already exists")
@@ -567,7 +563,6 @@ def confirm_import():
             if Asset.query.filter_by(asset_code=r["asset_code"]).first():
                 continue
 
-            # ✅ serial safety again
             if r.get("serial_no"):
                 if Asset.query.filter_by(serial_no=r["serial_no"]).first():
                     continue
@@ -647,7 +642,7 @@ def download_asset_template():
 
 
 # -------------------------------------------------
-# AMC CREATE + ACTIVE LIST (PAGINATED)
+# AMC CREATE + ACTIVE LIST 
 # -------------------------------------------------
 @app.route("/amc", methods=["GET", "POST"])
 @login_required
@@ -709,7 +704,6 @@ def amc_create():
             flash("AMC create failed. No data was saved.", "danger")
             return redirect(url_for("amc_create"))
 
-    # ✅ pagination for active AMCs list
     active_query = (
         AMC.query
         .filter_by(is_completed=False, is_cancelled=False)
@@ -782,7 +776,7 @@ def amc_view(amc_id):
 
 
 # -------------------------------------------------
-# AMC EVENT CREATE (✅ VALIDATED)
+# AMC EVENT CREATE 
 # -------------------------------------------------
 @app.route("/amc/<int:amc_id>/event", methods=["POST"])
 @login_required
@@ -803,12 +797,12 @@ def amc_add_event(amc_id):
         flash("Invalid event date", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
 
-    # ✅ RULE 1: cannot be future
+    # cannot be future
     if event_date > date.today():
         flash("Event date cannot be in the future", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
 
-    # ✅ RULE 2: must fall between AMC period
+    # must fall between AMC period
     if event_date < amc.start_date or event_date > amc.end_date:
         flash("Event date must be between AMC start and end date", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
@@ -1110,14 +1104,14 @@ def save_calibration():
             doc_index += 1
 
         # --------------------
-        # EVENTS (✅ VALIDATED)
+        # EVENTS 
         # --------------------
         idx = 0
         while f"event_date_{idx}" in request.form:
             ev_date_str = request.form.get(f"event_date_{idx}")
             ev_date = datetime.strptime(ev_date_str, "%Y-%m-%d").date()
 
-            # ✅ cannot be future
+            # cannot be future
             if ev_date > date.today():
                 db.session.rollback()
                 return jsonify({
@@ -1125,7 +1119,7 @@ def save_calibration():
                     "message": "Calibration event date cannot be in the future"
                 }), 400
 
-            # ✅ must be between done and next due
+            # must be between done and next due
             if ev_date < done_date or ev_date > next_due:
                 db.session.rollback()
                 return jsonify({
@@ -1178,7 +1172,7 @@ def calibration_download_document(doc_id):
 
 
 # -------------------------------------------------
-# HISTORY ROUTES (AMC) - PAGINATED
+# HISTORY ROUTES (AMC) 
 # -------------------------------------------------
 @app.route("/history")
 @login_required
@@ -1308,7 +1302,7 @@ def export_amc_history(amc_id):
 
 
 # -------------------------------------------------
-# HISTORY ROUTES (Calibration) - PAGINATED
+# HISTORY ROUTES (Calibration) 
 # -------------------------------------------------
 @app.route("/history/calibration")
 @login_required
@@ -1322,8 +1316,9 @@ def history_calibration_list():
         query = query.filter(Calibration.asset_id == asset_id)
 
     query = query.order_by(
-        Calibration.created_on.desc(),
-        Calibration.calibration_done_date.desc()
+        Calibration.calibration_done_date.desc(),
+        Calibration.next_due_date.desc(),
+        Calibration.created_on.desc()
     )
 
     page = request.args.get("page", 1, type=int)
@@ -1333,20 +1328,26 @@ def history_calibration_list():
     calibrations = pagination.items
     today = date.today()
 
-    # latest per asset among current page list is not enough.
-    # ✅ get true latest per asset from DB
+    all_for_status = query.all()
+
     latest_per_asset = {}
-    all_latest = (
-        Calibration.query
-        .order_by(
-            Calibration.calibration_done_date.desc(),
-            Calibration.created_on.desc()
-        )
-        .all()
-    )
-    for c in all_latest:
-        if c.asset_id not in latest_per_asset:
-            latest_per_asset[c.asset_id] = c.id
+    for c in all_for_status:
+        current = latest_per_asset.get(c.asset_id)
+
+        if not current:
+            latest_per_asset[c.asset_id] = c
+            continue
+
+        if c.calibration_done_date > current.calibration_done_date:
+            latest_per_asset[c.asset_id] = c
+        elif c.calibration_done_date == current.calibration_done_date:
+            if c.next_due_date > current.next_due_date:
+                latest_per_asset[c.asset_id] = c
+            elif c.next_due_date == current.next_due_date:
+                if c.created_on > current.created_on:
+                    latest_per_asset[c.asset_id] = c
+
+    latest_per_asset = {k: v.id for k, v in latest_per_asset.items()}
 
     days_left_map = {}
     status_map = {}
@@ -1392,6 +1393,7 @@ def history_calibration_view(calibration_id):
         .filter_by(asset_id=asset.id)
         .order_by(
             Calibration.calibration_done_date.desc(),
+            Calibration.next_due_date.desc(),
             Calibration.created_on.desc()
         )
         .first()
@@ -1549,7 +1551,7 @@ def scrap_asset():
 
 
 # -------------------------------------------------
-# SCRAP HISTORY (✅ NEW)
+# SCRAP HISTORY 
 # -------------------------------------------------
 @app.route("/history/scrap")
 @login_required
@@ -1633,7 +1635,6 @@ def reminders():
                 "source_id": amc.id
             })
 
-    # Calibration reminders (latest only)
     active_assets = Asset.query.filter_by(status="Active").all()
 
     for asset in active_assets:
