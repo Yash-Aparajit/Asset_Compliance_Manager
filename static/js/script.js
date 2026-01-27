@@ -1,16 +1,16 @@
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("IMPORT MODAL SCRIPT LOADED");
-
+    // =====================================================
+    // 1) IMPORT PREVIEW MODAL (Asset Import Page)
+    // =====================================================
     const modal = document.getElementById("importPreviewModal");
     const closeBtns = document.querySelectorAll("[data-close-modal]");
 
     if (modal) {
-        console.log("IMPORT MODAL FOUND → OPENING");
         modal.classList.add("active");
         document.body.style.overflow = "hidden";
     }
 
-    closeBtns.forEach(btn => {
+    closeBtns.forEach((btn) => {
         btn.addEventListener("click", () => {
             modal.classList.remove("active");
             document.body.style.overflow = "";
@@ -23,46 +23,62 @@ document.addEventListener("DOMContentLoaded", () => {
             document.body.style.overflow = "";
         }
     });
-});
 
-document.addEventListener("DOMContentLoaded", () => {
+    // =====================================================
+    // 2) AMC DOCUMENT TYPE: "OTHER" FIELD SHOW/HIDE
+    // =====================================================
     const docTypeSelect = document.getElementById("document_type");
     const otherGroup = document.getElementById("other_doc_group");
     const otherInput = document.getElementById("other_document_type");
 
-    if (!docTypeSelect) return;
+    if (docTypeSelect && otherGroup && otherInput) {
+        docTypeSelect.addEventListener("change", () => {
+            const isOther = docTypeSelect.value === "Other";
+            otherGroup.style.display = isOther ? "block" : "none";
+            otherInput.required = isOther;
 
-    docTypeSelect.addEventListener("change", () => {
-        if (docTypeSelect.value === "Other") {
-            otherGroup.style.display = "block";
-            otherInput.required = true;
-        } else {
-            otherGroup.style.display = "none";
-            otherInput.required = false;
-            otherInput.value = "";
+            if (!isOther) {
+                otherInput.value = "";
+            }
+        });
+
+        if (docTypeSelect.form) {
+            docTypeSelect.form.addEventListener("submit", () => {
+                if (docTypeSelect.value === "Other" && otherInput.value.trim()) {
+                    docTypeSelect.value = otherInput.value.trim();
+                }
+            });
         }
-    });
-
-    // Before submit → override value cleanly
-    docTypeSelect.form.addEventListener("submit", () => {
-        if (docTypeSelect.value === "Other" && otherInput.value.trim()) {
-            docTypeSelect.value = otherInput.value.trim();
-        }
-    });
-});
-
-function toggleMenu() {
-    const menu = document.getElementById("hamburgerMenu");
-    menu.style.display = menu.style.display === "flex" ? "none" : "flex";
-}
-
-document.addEventListener("click", function (event) {
-    const menu = document.getElementById("hamburgerMenu");
-    const btn = document.querySelector(".hamburger-btn");
-
-    if (!menu || !btn) return;
-
-    if (!menu.contains(event.target) && !btn.contains(event.target)) {
-        menu.style.display = "none";
     }
+
+    // =====================================================
+    // 3) HAMBURGER MENU (Navbar)
+    // =====================================================
+    const menu = document.getElementById("hamburgerMenu");
+    const button = document.querySelector(".hamburger"); 
+
+    function closeMenu() {
+        if (menu) menu.style.display = "none";
+    }
+
+    function toggleMenu() {
+        if (!menu) return;
+
+        const isOpen = menu.style.display === "block";
+        menu.style.display = isOpen ? "none" : "block";
+    }
+
+    window.toggleMenu = toggleMenu;
+
+    document.addEventListener("click", (e) => {
+        if (!menu || !button) return;
+
+        if (!menu.contains(e.target) && !button.contains(e.target)) {
+            closeMenu();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeMenu();
+    });
 });
