@@ -7,7 +7,6 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
 <body>
@@ -28,7 +27,6 @@
         <a href="{{ url_for('amc_create') }}">AMC</a>
         <a href="{{ url_for('calibration') }}">Calibration</a>
         <a href="{{ url_for('history') }}">History</a>
-        <a href="{{ url_for('history_scrap_list') }}">Scrap History</a>
         <a href="{{ url_for('reminders') }}" class="active">Reminders</a>
     </div>
 
@@ -80,6 +78,11 @@
         class="toggle-btn {% if request.path.startswith('/history/calibration') %}active{% endif %}">
             Calibration History
         </a>
+
+        <a href="{{ url_for('history_scrap_list') }}"
+        class="toggle-btn {% if request.path.startswith('/history/scrap') %}active{% endif %}">
+            Scrap History
+        </a>
     </div>
     {% endif %}
 
@@ -89,14 +92,12 @@
 
 <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
 
-
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
-    
     const btn = document.getElementById("hamburgerBtn");
     const menu = document.getElementById("hamburgerMenu");
 
