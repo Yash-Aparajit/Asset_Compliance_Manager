@@ -32,7 +32,7 @@ let events = [];
 let documents = [];
 
 // ----------------------
-// ✅ Load calibration panel
+//  calibration panel
 // ----------------------
 function loadCalibrationPanel(assetId) {
     if (!assetId) {
@@ -52,7 +52,6 @@ function loadCalibrationPanel(assetId) {
         .catch(() => {
             alert("This asset cannot be calibrated");
 
-            // ✅ Reset select properly for Select2 + normal select
             if (window.jQuery) {
                 $("#assetSelect").val(null).trigger("change");
             } else {
@@ -64,12 +63,10 @@ function loadCalibrationPanel(assetId) {
         });
 }
 
-// ✅ Native change (works without Select2)
 assetSelect.addEventListener("change", () => {
     loadCalibrationPanel(assetSelect.value);
 });
 
-// ✅ Select2 change support (this is the missing part)
 document.addEventListener("DOMContentLoaded", function () {
     if (window.jQuery) {
         $("#assetSelect").on("select2:select", function () {
@@ -101,14 +98,14 @@ function renderPanel(data) {
                 <tr><th>Plant</th><td>${data.asset.plant || "-"}</td></tr>
                 <tr><th>Department</th><td>${data.asset.department || "-"}</td></tr>
                 <tr><th>Location</th><td>${data.asset.location || "-"}</td></tr>
-                <tr><th>Purchase Date</th><td>${data.asset.purchase_date}</td></tr>
-                <tr><th>Asset Age (days)</th><td>${data.asset_age ?? "-"}</td></tr>
             </table>
         </div>
 
         <div class="card">
             <h3>Last Calibration Summary</h3>
             <table class="asset-table">
+                <tr><th>Purchase Date</th><td>${data.asset.purchase_date}</td></tr>
+                <tr><th>Asset Age (days)</th><td>${data.asset_age ?? "-"}</td></tr>
                 <tr><th>Last Done</th><td>${data.last_done}</td></tr>
                 <tr><th>Next Due</th><td>${data.next_due}</td></tr>
                 <tr><th>Days Left</th><td>${data.days_left}</td></tr>
@@ -364,7 +361,6 @@ function resetForm() {
     panel.innerHTML = "";
     panel.style.display = "none";
 
-    // ✅ reset select2 properly
     if (window.jQuery) {
         $("#assetSelect").val(null).trigger("change");
     } else {
