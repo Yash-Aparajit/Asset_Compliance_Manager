@@ -20,7 +20,6 @@ from functools import wraps
 from openpyxl import Workbook
 from io import BytesIO
 
-
 # -------------------------------------------------
 # APP CONFIG
 # -------------------------------------------------
@@ -118,7 +117,6 @@ def is_acknowledged(source_type, source_id, rule):
         is not None
     )
 
-
 # -------------------------------------------------
 # ASSET IMPORT SCHEMA
 # -------------------------------------------------
@@ -131,7 +129,6 @@ ASSET_IMPORT_COLUMNS = {
     "Location": "location",
     "Purchase Date (DD/MM/YYYY)": "purchase_date",
 }
-
 
 # -------------------------------------------------
 # AUTH HELPERS
@@ -155,7 +152,6 @@ def role_required(roles):
             return f(*args, **kwargs)
         return wrapper
     return decorator
-
 
 # -------------------------------------------------
 # INITIAL DB + USER SEED
@@ -201,7 +197,6 @@ with app.app_context():
     except Exception:
         db.session.rollback()
 
-
 # -------------------------------------------------
 # ROOT ROUTE
 # -------------------------------------------------
@@ -210,7 +205,6 @@ def root():
     if "user_id" not in session:
         return redirect(url_for("login"))
     return redirect(url_for("reminders"))
-
 
 # -------------------------------------------------
 # LOGIN & LOGOUT
@@ -241,7 +235,6 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
-
 
 # -------------------------------------------------
 # ASSET MASTER 
@@ -286,7 +279,6 @@ def asset_master():
         assets=pagination.items,
         pagination=pagination
     )
-
 
 # -------------------------------------------------
 # ADD ASSET
@@ -341,7 +333,6 @@ def add_asset():
             return render_template("asset_add.html")
 
     return render_template("asset_add.html")
-
 
 # -------------------------------------------------
 # EDIT ASSET
@@ -405,7 +396,6 @@ def edit_asset(asset_id):
             return render_template("asset_edit.html", asset=asset)
 
     return render_template("asset_edit.html", asset=asset)
-
 
 # -------------------------------------------------
 # Asset Import
@@ -546,7 +536,6 @@ def import_assets():
 
     return render_template("asset_import.html")
 
-
 @app.route("/assets/import/confirm", methods=["POST"])
 @login_required
 def confirm_import():
@@ -591,7 +580,6 @@ def confirm_import():
 
     flash(f"{imported_count} assets imported successfully", "success")
     return redirect(url_for("asset_master"))
-
 
 # -------------------------------------------------
 # DOWNLOAD ASSET IMPORT TEMPLATE
@@ -639,7 +627,6 @@ def download_asset_template():
         download_name="ACM_Asset_Import_Template.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 
 # -------------------------------------------------
 # AMC CREATE + ACTIVE LIST 
@@ -737,7 +724,6 @@ def amc_create():
         pagination=active_pagination
     )
 
-
 # -------------------------------------------------
 # AMC VIEW
 # -------------------------------------------------
@@ -773,7 +759,6 @@ def amc_view(amc_id):
         total_spend=total_spend,
         today=today
     )
-
 
 # -------------------------------------------------
 # AMC EVENT CREATE 
@@ -825,7 +810,6 @@ def amc_add_event(amc_id):
         db.session.rollback()
         flash("AMC event save failed. No data was saved.", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
-
 
 # -------------------------------------------------
 # AMC DOCUMENT UPLOAD
@@ -894,7 +878,6 @@ def amc_upload_document(amc_id):
         flash("Document upload failed. No data was saved.", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
 
-
 # -------------------------------------------------
 # AMC DOCUMENT DOWNLOAD
 # -------------------------------------------------
@@ -913,7 +896,6 @@ def amc_download_document(doc_id):
         as_attachment=False,
         mimetype="application/pdf"
     )
-
 
 # -------------------------------------------------
 # AMC COMPLETE
@@ -940,7 +922,6 @@ def amc_complete(amc_id):
         flash("AMC completion failed. No changes were saved.", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
 
-
 # -------------------------------------------------
 # AMC CANCEL
 # -------------------------------------------------
@@ -965,7 +946,6 @@ def amc_cancel(amc_id):
         db.session.rollback()
         flash("AMC cancel failed. No changes were saved.", "danger")
         return redirect(url_for("amc_view", amc_id=amc.id))
-
 
 # -------------------------------------------------
 # CALIBRATION MAIN PAGE
@@ -1028,7 +1008,6 @@ def calibration_asset_data(asset_id):
         "next_due": next_due,
         "days_left": days_left,
     }
-
 
 @app.route("/calibration/save", methods=["POST"])
 @login_required
@@ -1150,7 +1129,6 @@ def save_calibration():
             "message": "Calibration save failed. No data was recorded."
         }), 500
 
-
 # -------------------------------------------------
 # CALIBRATION DOCUMENT DOWNLOAD
 # -------------------------------------------------
@@ -1169,7 +1147,6 @@ def calibration_download_document(doc_id):
         as_attachment=False,
         mimetype="application/pdf"
     )
-
 
 # -------------------------------------------------
 # HISTORY ROUTES (AMC) 
@@ -1215,7 +1192,6 @@ def history():
         selected_status=status
     )
 
-
 @app.route("/history/amc/<int:amc_id>")
 @login_required
 def history_amc_view(amc_id):
@@ -1244,7 +1220,6 @@ def history_amc_view(amc_id):
         event_total=event_total,
         total_spend=total_spend
     )
-
 
 @app.route("/history/amc/<int:amc_id>/export")
 @login_required
@@ -1299,7 +1274,6 @@ def export_amc_history(amc_id):
         download_name=filename,
         mimetype="application/zip"
     )
-
 
 # -------------------------------------------------
 # HISTORY ROUTES (Calibration) 
@@ -1374,7 +1348,6 @@ def history_calibration_list():
         selected_asset=asset_id
     )
 
-
 @app.route("/history/calibration/<int:calibration_id>")
 @login_required
 def history_calibration_view(calibration_id):
@@ -1423,7 +1396,6 @@ def history_calibration_view(calibration_id):
         calibration_cost=calibration_cost,
         total_spend=total_spend
     )
-
 
 @app.route("/history/calibration/<int:calibration_id>/export")
 @login_required
@@ -1474,7 +1446,6 @@ def export_calibration_history(calibration_id):
         download_name=filename,
         mimetype="application/zip"
     )
-
 
 # -------------------------------------------------
 # SCRAP ASSET
@@ -1549,7 +1520,6 @@ def scrap_asset():
 
     return render_template("scrap_asset.html", assets=assets)
 
-
 # -------------------------------------------------
 # SCRAP HISTORY 
 # -------------------------------------------------
@@ -1572,7 +1542,6 @@ def history_scrap_list():
         pagination=pagination
     )
 
-
 @app.route("/scrap/document/<int:scrap_id>/download")
 @login_required
 def scrap_download(scrap_id):
@@ -1584,7 +1553,6 @@ def scrap_download(scrap_id):
         return redirect(url_for("history_scrap_list"))
 
     return send_file(path, as_attachment=False, mimetype="application/pdf")
-
 
 # -------------------------------
 # REMINDER ROUTES
@@ -1693,7 +1661,6 @@ def reminders():
 
     return render_template("reminders.html", reminders=reminders)
 
-
 @app.route("/reminders/acknowledge", methods=["POST"])
 @login_required
 def acknowledge_reminder():
@@ -1744,7 +1711,6 @@ def acknowledge_reminder():
             "message": "Acknowledgement failed. Please refresh and try again."
         }), 500
 
-
 # -------------------------------------------------
 # BACKUP
 # -------------------------------------------------
@@ -1775,7 +1741,6 @@ def backup():
         download_name=backup_name,
         mimetype="application/zip"
     )
-
 
 # -------------------------------------------------
 # CHANGE PASSWORD
@@ -1818,7 +1783,6 @@ def change_password():
 
     return render_template("change_password.html")
 
-
 # -------------------------------------------------
 # PASSWORD RESET
 # -------------------------------------------------
@@ -1860,7 +1824,6 @@ def reset_password():
             return redirect(url_for("reset_password"))
 
     return render_template("reset_password.html", users=users)
-
 
 # -------------------------------------------------
 # RUN
