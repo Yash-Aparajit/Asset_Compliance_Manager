@@ -3,7 +3,6 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
-
 # -------------------------
 # USER / AUTH
 # -------------------------
@@ -26,7 +25,6 @@ class User(db.Model):
 
     def __repr__(self):
         return f"<User {self.username} ({self.role})>"
-
 
 # -------------------------
 # ASSET (CORE ENTITY)
@@ -301,7 +299,6 @@ class Calibration(db.Model):
             f"{self.calibration_done_date} → {self.next_due_date}>"
         )
 
-
 # -------------------------
 # CALIBRATION EVENTS
 # -------------------------
@@ -349,7 +346,6 @@ class CalibrationEvent(db.Model):
 
     def __repr__(self):
         return f"<CalibrationEvent Cal={self.calibration_id} {self.event_date}>"
-
 
 # -------------------------
 # CALIBRATION DOCUMENTS
@@ -431,7 +427,6 @@ class AssetScrap(db.Model):
         "Asset",
         backref=db.backref("scrap_record", uselist=False)
     )
-
 
 # -------------------------
 # REMINDER ACKNOWLEDGEMENT
